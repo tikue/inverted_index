@@ -1,0 +1,8 @@
+[package]
+name = "inverted_index"
+version = "0.1.0"
+authors = ["Tim Kuehn <tim@solvvy.com>"]
+
+[dependencies.shared_slice]
+git = "https://github.com/tikue/shared_slice.git"
+
