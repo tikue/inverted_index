@@ -3,15 +3,15 @@ extern crate shared_slice;
 
 use std::collections::{BTreeMap, HashSet};
 use std::hash::{Hash, Hasher};
-use std::str::from_utf8_unchecked;
+use std::rc::Rc;
 use shared_slice::rc::RcStr;
  
-/// A Document contains an id and content, both of which are reference-counted strings.
+/// A Document contains an id and content.
 /// Hashing and equality are based only on the id field.
 #[derive(Clone, Eq)]
 pub struct Document {
-    id: RcStr,
-    content: RcStr,
+    id: String,
+    content: String,
 }
 
 impl Document {
@@ -21,18 +21,15 @@ impl Document {
         where S: Into<String>,
               T: Into<String> 
     {
-        Document { 
-            id: into_rc_str(id),
-            content: into_rc_str(content),
-        }
+        Document { id: id.into(), content: content.into(), }
     }
 
     pub fn id(&self) -> &str {
-        unsafe { from_utf8_unchecked(&*self.id) }
+        &self.id
     }
 
     pub fn content(&self) -> &str {
-        unsafe { from_utf8_unchecked(&*self.content) }
+        &self.content
     }
 }
  
@@ -44,7 +41,7 @@ fn into_rc_str<S: Into<String>>(id: S) -> RcStr {
 
 impl Hash for Document {
     fn hash<H>(&self, state: &mut H) where H: Hasher {
-        state.write(&*self.id);
+        state.write(self.id.as_bytes());
     }
 }
  
@@ -68,17 +65,18 @@ trait Index {
     /// What constitutes a "match" is implementation-specific; loosely, a Document should
     /// match a query if they are somehow related. A naive implementation might simply
     /// return the set of Documents for which `query` is a substring of their content.
-    fn search(&self, query: &str) -> HashSet<Document>;
+    fn search(&self, query: &str) -> HashSet<Rc<Document>>;
 }
  
 /// A basic implementation of an `Index`, the inverted index is a data structure that maps
 /// from words to sets of Documents.
-type InvertedIndex = BTreeMap<RcStr, HashSet<Document>>;
+type InvertedIndex = BTreeMap<RcStr, HashSet<Rc<Document>>>;
  
 impl Index for InvertedIndex {
     /// A basic implementation of index, splits the document's content into whitespace-separated
     /// words, and inserts each word-document pair into the map.
     fn index(&mut self, doc: Document) {
+        let doc = Rc::new(doc);
         let lowercased = doc.content().to_lowercase();
         let ngrams = into_rc_str(lowercased)
             .split_whitespace()
@@ -91,7 +89,7 @@ impl Index for InvertedIndex {
  
     /// A basic search implementation that splits the query's content into whitespace-separated
     /// words, looks up the set of Documents for each word, and then concatenates the sets.
-    fn search(&self, query: &str) -> HashSet<Document> {
+    fn search(&self, query: &str) -> HashSet<Rc<Document>> {
         query.split_whitespace()
             .flat_map(|word| self.get(&into_rc_str(word)))
             .flat_map(|docs| docs)
