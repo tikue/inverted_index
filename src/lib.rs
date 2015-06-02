@@ -4,7 +4,6 @@ extern crate shared_slice;
 use std::collections::{BTreeMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
-use shared_slice::rc::RcStr;
  
 /// A Document contains an id and content.
 /// Hashing and equality are based only on the id field.
@@ -33,12 +32,6 @@ impl Document {
     }
 }
  
-fn into_rc_str<S: Into<String>>(id: S) -> RcStr {
-    let id = id.into();
-    let id: Vec<u8> = id.into();
-    RcStr::new(id.into_boxed_slice())
-}
-
 impl Hash for Document {
     fn hash<H>(&self, state: &mut H) where H: Hasher {
         state.write(self.id.as_bytes());
@@ -70,7 +63,7 @@ trait Index {
  
 /// A basic implementation of an `Index`, the inverted index is a data structure that maps
 /// from words to sets of Documents.
-type InvertedIndex = BTreeMap<RcStr, HashSet<Rc<Document>>>;
+type InvertedIndex = BTreeMap<String, HashSet<Rc<Document>>>;
  
 impl Index for InvertedIndex {
     /// A basic implementation of index, splits the document's content into whitespace-separated
@@ -78,9 +71,9 @@ impl Index for InvertedIndex {
     fn index(&mut self, doc: Document) {
         let doc = Rc::new(doc);
         let lowercased = doc.content().to_lowercase();
-        let ngrams = into_rc_str(lowercased)
+        let ngrams = lowercased
             .split_whitespace()
-            .flat_map(|word: RcStr| (1..word.len() + 1).map(move |to| word.clone().slice_to(to)));
+            .flat_map(|word| (1..word.len() + 1).map(move |to| (&word[..to]).into()));
 
         for ngram in ngrams {
             self.entry(ngram).or_insert_with(|| HashSet::new()).insert(doc.clone());
@@ -91,7 +84,7 @@ impl Index for InvertedIndex {
     /// words, looks up the set of Documents for each word, and then concatenates the sets.
     fn search(&self, query: &str) -> HashSet<Rc<Document>> {
         query.split_whitespace()
-            .flat_map(|word| self.get(&into_rc_str(word)))
+            .flat_map(|word| self.get(word))
             .flat_map(|docs| docs)
             .cloned()
             .collect()
