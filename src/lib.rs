@@ -52,7 +52,7 @@ struct IndexedDocument {
 }
 
 /// An Index is anything that can store Documents and return matching Documents for a query.
-trait Index {
+pub trait Index {
     /// Given a Document, stores it in the index.
     fn index(&mut self, doc: Document);
     /// Given a query, return the set of Documents that match the query.
@@ -64,7 +64,7 @@ trait Index {
  
 /// A basic implementation of an `Index`, the inverted index is a data structure that maps
 /// from words to sets of Documents.
-type InvertedIndex = BTreeMap<String, HashSet<IndexedDocument>>;
+pub type InvertedIndex = BTreeMap<String, HashSet<IndexedDocument>>;
  
 impl Index for InvertedIndex {
     /// A basic implementation of index, splits the document's content into whitespace-separated
