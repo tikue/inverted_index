@@ -2,7 +2,7 @@ extern crate itertools;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::hash::{Hash, Hasher};
-use std::rc::Rc;
+use std::sync::Arc;
 
 use itertools::Itertools;
  
@@ -47,7 +47,7 @@ impl PartialEq<Document> for Document {
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 struct IndexedDocument {
-    pub doc: Rc<Document>,
+    pub doc: Arc<Document>,
     pub highlighted: (usize, usize),
 }
 
@@ -70,7 +70,7 @@ impl Index for InvertedIndex {
     /// A basic implementation of index, splits the document's content into whitespace-separated
     /// words, and inserts each word-document pair into the map.
     fn index(&mut self, doc: Document) {
-        let doc = Rc::new(doc);
+        let doc = Arc::new(doc);
         let analyzed = doc.content()
             .char_indices()
             .group_by(|&(_, c)| c.is_whitespace())
@@ -113,20 +113,20 @@ impl Index for InvertedIndex {
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct SearchResult {
-    doc: Rc<Document>,
+    doc: Arc<Document>,
     highlights: Vec<(usize, usize)>,
 }
 
 impl SearchResult {
     #[cfg(test)]
-    fn new(doc: Rc<Document>, highlights: Vec<(usize, usize)>) -> SearchResult {
+    fn new(doc: Arc<Document>, highlights: Vec<(usize, usize)>) -> SearchResult {
         SearchResult {
             doc: doc,
             highlights: highlights,
         }
     }
 
-    pub fn doc(&self) -> &Rc<Document> {
+    pub fn doc(&self) -> &Arc<Document> {
         &self.doc
     }
 
@@ -160,8 +160,8 @@ fn test_search1() {
     index.index(doc2.clone());
     let search_results = index.search("today");
     let expected = [
-        SearchResult::new(Rc::new(doc1), vec![(25, 30)]),
-        SearchResult::new(Rc::new(doc2), vec![(13, 18)])
+        SearchResult::new(Arc::new(doc1), vec![(25, 30)]),
+        SearchResult::new(Arc::new(doc2), vec![(13, 18)])
     ];
     assert_eq!(search_results, expected.iter().cloned().collect());
     assert_eq!("learn to program in rust <b>today</b>", expected[0].highlighted_content());
@@ -176,8 +176,8 @@ fn test_ngrams() {
     index.index(doc2.clone());
     let search_results = index.search("to");
     let expected = [
-        SearchResult::new(Rc::new(doc1), vec![(6, 8), (25, 27)]),
-        SearchResult::new(Rc::new(doc2), vec![(13, 15)]),
+        SearchResult::new(Arc::new(doc1), vec![(6, 8), (25, 27)]),
+        SearchResult::new(Arc::new(doc2), vec![(13, 15)]),
     ];
     assert_eq!(search_results, expected.iter().cloned().collect());
     assert_eq!("learn <b>to</b> program in rust <b>to</b>day", expected[0].highlighted_content());
@@ -193,8 +193,8 @@ fn test_search2() {
     index.index(doc2.clone());
     let search_results = index.search("to");
     let expected = [
-        SearchResult::new(Rc::new(doc1), vec![(5, 7), (11, 13)]),
-        SearchResult::new(Rc::new(doc2), vec![(4, 6)]),
+        SearchResult::new(Arc::new(doc1), vec![(5, 7), (11, 13)]),
+        SearchResult::new(Arc::new(doc2), vec![(4, 6)]),
     ];
     assert_eq!(search_results, expected.iter().cloned().collect());
     assert_eq!(expected[0].highlighted_content(), "what <b>to</b> do <b>to</b>day");
