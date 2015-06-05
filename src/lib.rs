@@ -121,6 +121,7 @@ fn analyze_doc(doc: &str)
 
 /// A basic implementation of an `Index`, the inverted index is a data structure that maps
 /// from words to sets of Documents.
+#[derive(Debug)]
 pub struct InvertedIndex {
     index: BTreeMap<String, HashSet<IndexedDocument>>,
     docs: BTreeMap<String, Arc<Document>>,
@@ -281,4 +282,16 @@ fn test_unicode() {
     let &SearchResult { ref doc, ref highlights } = search_results.iter().next().unwrap();
     let (begin, end) = highlights[0];
     assert_eq!(&doc.content()[begin..end], to_search);
+}
+
+#[test]
+fn test_update_doc() {
+    let mut index = InvertedIndex::new();    
+    let doc = Document::new("0", "abc åäö");
+    index.index(doc);
+    let doc = Document::new("0", "different");
+    index.index(doc);
+    let search_results = index.search("å");
+    assert!(search_results.is_empty());
+    assert_eq!(index.docs.len(), 1);
 }
