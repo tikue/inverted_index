@@ -1,11 +1,13 @@
-#![feature(collections)]
+#![feature(collections, unboxed_closures, core)]
 extern crate itertools;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
+use std::iter;
+use std::ops;
 
-use itertools::Itertools;
+use itertools::{GroupBy, Itertools};
  
 /// A Document contains an id and content.
 /// Hashing and equality are based only on the id field.
@@ -13,6 +15,12 @@ use itertools::Itertools;
 pub struct Document {
     id: String,
     content: String,
+}
+
+impl Drop for Document {
+    fn drop(&mut self) {
+        println!("Dropped doc {}", self.id);
+    }
 }
 
 impl Document {
@@ -51,50 +59,112 @@ struct IndexedDocument {
     pub doc: Arc<Document>,
     pub highlighted: (usize, usize),
 }
-
-/// An Index is anything that can store Documents and return matching Documents for a query.
-pub trait Index {
-    /// Given a Document, stores it in the index.
-    fn index(&mut self, doc: Document);
-    /// Given a query, return the set of Documents that match the query.
-    /// What constitutes a "match" is implementation-specific; loosely, a Document should
-    /// match a query if they are somehow related. A naive implementation might simply
-    /// return the set of Documents for which `query` is a substring of their content.
-    fn search(&self, query: &str) -> HashSet<SearchResult>;
-}
  
+fn ngrams((_, chars): (bool, Vec<(usize, char)>)) -> iter::Map<ops::Range<usize>, Ngrams> {
+    (1..chars.len() + 1).map(Ngrams::new(chars))
+}
+
+fn not_whitespace(&(is_whitespace, _): &(bool, Vec<(usize, char)>)) -> bool {
+    !is_whitespace
+}
+
+fn is_whitespace(&(_, c): &(usize, char)) -> bool {
+    c.is_whitespace()
+}
+
+struct Ngrams {
+    chars: Vec<(usize, char)>
+}
+
+impl Ngrams {
+    fn new(chars: Vec<(usize, char)>) -> Ngrams {
+        Ngrams { chars: chars }
+    }
+}
+
+impl Fn<(usize,)> for Ngrams {
+    extern "rust-call" fn call(&self, (to,): (usize,)) -> (String, (usize, usize)) {
+        let word = self.chars[..to].iter().flat_map(|&(_, c)| c.to_lowercase()).collect();
+        let start = self.chars[0].0;
+        let (last_idx, last_char) = self.chars[to - 1];
+        let finish = last_idx + last_char.len_utf8();
+        (word, (start, finish))
+    }
+}
+
+impl FnMut<(usize,)> for Ngrams {
+    extern "rust-call" fn call_mut(&mut self, to: (usize,)) -> (String, (usize, usize)) {
+        self.call(to)
+    }
+}
+
+impl FnOnce<(usize,)> for Ngrams {
+    type Output = (String, (usize, usize));
+    extern "rust-call" fn call_once(self, to: (usize,)) -> (String, (usize, usize)) {
+        self.call(to)
+    }
+}
+
+fn analyze_doc(doc: &str) 
+-> iter::FlatMap<
+    iter::Filter<
+        GroupBy<bool, std::str::CharIndices, fn(&(usize, char)) -> bool>, 
+        fn(&(bool, Vec<(usize, char)>)) -> bool>, 
+    iter::Map<ops::Range<usize>, Ngrams>,
+    fn((bool, Vec<(usize, char)>)) -> iter::Map<ops::Range<usize>, Ngrams>> 
+{
+    doc.char_indices()
+        .group_by(is_whitespace as fn(&(usize, char)) -> bool)
+        .filter(not_whitespace as fn(&(bool, Vec<(usize, char)>)) -> bool)
+        .flat_map(ngrams)
+}
+
 /// A basic implementation of an `Index`, the inverted index is a data structure that maps
 /// from words to sets of Documents.
-pub type InvertedIndex = BTreeMap<String, HashSet<IndexedDocument>>;
+pub struct InvertedIndex {
+    index: BTreeMap<String, HashSet<IndexedDocument>>,
+    docs: BTreeMap<String, Arc<Document>>,
+}
  
-impl Index for InvertedIndex {
+impl InvertedIndex {
+    pub fn new() -> InvertedIndex {
+        InvertedIndex {
+            index: BTreeMap::new(),
+            docs: BTreeMap::new(),
+        }
+    }
+
     /// A basic implementation of index, splits the document's content into whitespace-separated
     /// words, and inserts each word-document pair into the map.
-    fn index(&mut self, doc: Document) {
+    pub fn index(&mut self, doc: Document) {
         let doc = Arc::new(doc);
-        let analyzed = doc.content()
-            .char_indices()
-            .group_by(|&(_, c)| c.is_whitespace())
-            .filter(|&(is_whitespace, _)| !is_whitespace)
-            .flat_map(|(_, chars)| (1..chars.len() + 1).map(move |to| {
-                let word: String = chars[..to].iter().flat_map(|&(_, c)| c.to_lowercase()).collect();
-                let start = chars[0].0;
-                let (last_idx, last_char) = chars[to - 1];
-                let finish = last_idx + last_char.len_utf8();
-                (word, (start, finish))
-            }));
+        let analyzed  = analyze_doc(doc.content());
+        let previous_version = self.docs.insert(doc.id.clone(), doc.clone());
+        if let Some(previous_version) = previous_version {
+            let previous_analyzed = analyze_doc(previous_version.content());
+            for (ngram, highlights) in previous_analyzed {
+                let is_empty = {
+                    let docs_for_ngram = self.index.get_mut(&ngram).unwrap();
+                    docs_for_ngram.remove(&IndexedDocument { doc: doc.clone(), highlighted: highlights });
+                    docs_for_ngram.is_empty()
+                };
+                if is_empty {
+                    self.index.remove(&ngram);
+                }
+            }
+        }
 
         for (ngram, highlighted) in analyzed {
-            self.entry(ngram).or_insert_with(|| HashSet::new())
+            self.index.entry(ngram).or_insert_with(|| HashSet::new())
                 .insert(IndexedDocument { doc: doc.clone(), highlighted: highlighted });
         }
     }
  
     /// A basic search implementation that splits the query's content into whitespace-separated
     /// words, looks up the set of Documents for each word, and then concatenates the sets.
-    fn search(&self, query: &str) -> HashSet<SearchResult> {
+    pub fn search(&self, query: &str) -> HashSet<SearchResult> {
         let map = query.split_whitespace()
-            .flat_map(|word| self.get(&word.to_lowercase()))
+            .flat_map(|word| self.index.get(&word.to_lowercase()))
             .flat_map(|docs| docs)
             .cloned()
             .fold(HashMap::new(), |mut map, search_result| {
