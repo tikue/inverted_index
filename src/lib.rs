@@ -1,6 +1,6 @@
 extern crate itertools;
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
@@ -46,9 +46,9 @@ impl PartialEq<Document> for Document {
 }
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
-struct SearchResult {
+struct IndexedDocument {
     pub doc: Rc<Document>,
-    pub highlighted: (usize, usize)
+    pub highlighted: (usize, usize),
 }
 
 /// An Index is anything that can store Documents and return matching Documents for a query.
@@ -64,7 +64,7 @@ trait Index {
  
 /// A basic implementation of an `Index`, the inverted index is a data structure that maps
 /// from words to sets of Documents.
-type InvertedIndex = BTreeMap<String, HashSet<SearchResult>>;
+type InvertedIndex = BTreeMap<String, HashSet<IndexedDocument>>;
  
 impl Index for InvertedIndex {
     /// A basic implementation of index, splits the document's content into whitespace-separated
@@ -85,18 +85,69 @@ impl Index for InvertedIndex {
 
         for (ngram, highlighted) in analyzed {
             self.entry(ngram).or_insert_with(|| HashSet::new())
-                .insert(SearchResult { doc: doc.clone(), highlighted: highlighted });
+                .insert(IndexedDocument { doc: doc.clone(), highlighted: highlighted });
         }
     }
  
     /// A basic search implementation that splits the query's content into whitespace-separated
     /// words, looks up the set of Documents for each word, and then concatenates the sets.
     fn search(&self, query: &str) -> HashSet<SearchResult> {
-        query.split_whitespace()
+        let map = query.split_whitespace()
             .flat_map(|word| self.get(word))
             .flat_map(|docs| docs)
             .cloned()
-            .collect()
+            .fold(HashMap::new(), |mut map, search_result| {
+                map.entry(search_result.doc)
+                    .or_insert(Vec::new())
+                    .push(search_result.highlighted);
+                map
+            });
+        map.into_iter()
+            .map(|(doc, mut highlights)| {
+                highlights.sort();
+                SearchResult { doc: doc, highlights: highlights }
+            })
+        .collect()
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+pub struct SearchResult {
+    doc: Rc<Document>,
+    highlights: Vec<(usize, usize)>,
+}
+
+impl SearchResult {
+    #[cfg(test)]
+    fn new(doc: Rc<Document>, highlights: Vec<(usize, usize)>) -> SearchResult {
+        SearchResult {
+            doc: doc,
+            highlights: highlights,
+        }
+    }
+
+    pub fn doc(&self) -> &Rc<Document> {
+        &self.doc
+    }
+
+    pub fn highlights(&self) -> &Vec<(usize, usize)> {
+        &self.highlights
+    }
+
+    pub fn highlighted_content(&self) -> String {
+        let &SearchResult {ref doc, ref highlights} = self;
+        let content = doc.content();
+        let mut begin_idx = 0;
+        let mut parts = vec![];
+        for &(begin, end) in highlights {
+            parts.push(&content[begin_idx..begin]);
+            parts.push("<b>");
+            parts.push(&content[begin..end]);
+            parts.push("</b>");
+            begin_idx = end;
+        }
+        parts.push(&content[begin_idx..]);
+        parts.into_iter().join("")
     }
 }
 
@@ -104,12 +155,16 @@ impl Index for InvertedIndex {
 fn test_search1() {
     let mut index = InvertedIndex::new();    
     let doc1 = Document::new("1", "learn to program in rust today");
-    let doc2 = Document::new("2", "what did you today do");
     index.index(doc1.clone());
+    let doc2 = Document::new("2", "what did you today do");
     index.index(doc2.clone());
     let search_results = index.search("today");
-    assert!(search_results.contains(&SearchResult { doc: Rc::new(doc1), highlighted: (25, 30) }));
-    assert!(search_results.contains(&SearchResult { doc: Rc::new(doc2), highlighted: (13, 18) }));
+    let expected = [
+        SearchResult::new(Rc::new(doc1), vec![(25, 30)]),
+        SearchResult::new(Rc::new(doc2), vec![(13, 18)])
+    ];
+    assert_eq!(search_results, expected.iter().cloned().collect());
+    assert_eq!("learn to program in rust <b>today</b>", expected[0].highlighted_content());
 }
 
 #[test]
@@ -120,18 +175,29 @@ fn test_ngrams() {
     index.index(doc1.clone());
     index.index(doc2.clone());
     let search_results = index.search("to");
-    println!("{:?}", search_results);
-    assert!(search_results.contains(&SearchResult { doc: Rc::new(doc1), highlighted: (25, 27) }));
-    assert!(search_results.contains(&SearchResult { doc: Rc::new(doc2), highlighted: (13, 15) }));
+    let expected = [
+        SearchResult::new(Rc::new(doc1), vec![(6, 8), (25, 27)]),
+        SearchResult::new(Rc::new(doc2), vec![(13, 15)]),
+    ];
+    assert_eq!(search_results, expected.iter().cloned().collect());
+    assert_eq!("learn <b>to</b> program in rust <b>to</b>day", expected[0].highlighted_content());
+
 }
 
 #[test]
 fn test_search2() {
     let mut index = InvertedIndex::new();    
-    index.index(Document::new("2", "what to do today"));
-    index.index(Document::new("3", "hey today"));
+    let doc1 = Document::new("2", "what to do today");
+    let doc2 = Document::new("3", "hey today");
+    index.index(doc1.clone());
+    index.index(doc2.clone());
     let search_results = index.search("to");
-    assert_eq!(search_results.len(), 3);
+    let expected = [
+        SearchResult::new(Rc::new(doc1), vec![(5, 7), (11, 13)]),
+        SearchResult::new(Rc::new(doc2), vec![(4, 6)]),
+    ];
+    assert_eq!(search_results, expected.iter().cloned().collect());
+    assert_eq!(expected[0].highlighted_content(), "what <b>to</b> do <b>to</b>day");
 }
 
 #[test]
@@ -140,8 +206,8 @@ fn test_unicode() {
     let doc = Document::new("0", "abc åäö");
     index.index(doc.clone());
     let to_search = "å";
-    let result = index.search(to_search).into_iter().next().unwrap();
-    let (begin, end) = result.highlighted;
-    assert_eq!(&result.doc.content()[begin..end], to_search);
+    let search_results = index.search(to_search);
+    let &SearchResult { ref doc, ref highlights } = search_results.iter().next().unwrap();
+    let (begin, end) = highlights[0];
+    assert_eq!(&doc.content()[begin..end], to_search);
 }
-
