@@ -1,3 +1,4 @@
+#![feature(collections)]
 extern crate itertools;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -76,7 +77,7 @@ impl Index for InvertedIndex {
             .group_by(|&(_, c)| c.is_whitespace())
             .filter(|&(is_whitespace, _)| !is_whitespace)
             .flat_map(|(_, chars)| (1..chars.len() + 1).map(move |to| {
-                let word: String = chars[..to].iter().map(|&(_, c)| c).collect();
+                let word: String = chars[..to].iter().flat_map(|&(_, c)| c.to_lowercase()).collect();
                 let start = chars[0].0;
                 let (last_idx, last_char) = chars[to - 1];
                 let finish = last_idx + last_char.len_utf8();
@@ -93,7 +94,7 @@ impl Index for InvertedIndex {
     /// words, looks up the set of Documents for each word, and then concatenates the sets.
     fn search(&self, query: &str) -> HashSet<SearchResult> {
         let map = query.split_whitespace()
-            .flat_map(|word| self.get(word))
+            .flat_map(|word| self.get(&word.to_lowercase()))
             .flat_map(|docs| docs)
             .cloned()
             .fold(HashMap::new(), |mut map, search_result| {
