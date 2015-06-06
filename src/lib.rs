@@ -179,13 +179,29 @@ impl InvertedIndex {
 
 #[derive(Clone, Debug, PartialEq, RustcEncodable)]
 pub struct SearchResult {
-    pub doc: Arc<Document>,
-    pub highlights: Vec<(usize, usize)>,
-    pub highlighted: String,
-    pub score: f64,
+    doc: Arc<Document>,
+    highlights: Vec<(usize, usize)>,
+    highlighted: String,
+    score: f64,
 }
 
 impl SearchResult {
+    pub fn doc(&self) -> &Arc<Document> {
+        &self.doc
+    }
+
+    pub fn highlights(&self) -> &Vec<(usize, usize)> {
+        &self.highlights
+    }
+
+    pub fn highlighted(&self) -> &String {
+        &self.highlighted
+    }
+
+    pub fn score(&self) -> f64 {
+        self.score
+    }
+
     fn new_((doc, highlights): (Arc<Document>, Vec<(usize, usize)>)) -> SearchResult {
         SearchResult::new(doc, highlights)
     }
