@@ -223,9 +223,9 @@ impl SearchResult {
         let mut parts = vec![];
         for &(begin, end) in highlights {
             parts.push(&content[begin_idx..begin]);
-            parts.push("<b>");
+            parts.push("<span class=highlight>");
             parts.push(&content[begin..end]);
-            parts.push("</b>");
+            parts.push("</span>");
             begin_idx = end;
         }
         parts.push(&content[begin_idx..]);
