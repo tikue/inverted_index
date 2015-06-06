@@ -3,6 +3,7 @@ extern crate itertools;
 extern crate rustc_serialize;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::hash_map::IntoIter;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use std::iter;
@@ -158,10 +159,10 @@ impl InvertedIndex {
  
     /// A basic search implementation that splits the query's content into whitespace-separated
     /// words, looks up the set of Documents for each word, and then concatenates the sets.
-    pub fn search(&self, query: &str) -> HashSet<SearchResult> {
+    pub fn search(&self, query: &str) -> SearchResults {
         let map = query.split_whitespace()
             .flat_map(|word| self.index.get(&word.to_lowercase()))
-            .flat_map(|docs| docs)
+            .flat_map(|doc| doc)
             .cloned()
             .fold(HashMap::new(), |mut map, search_result| {
                 map.entry(search_result.doc)
@@ -169,12 +170,22 @@ impl InvertedIndex {
                     .push(search_result.highlighted);
                 map
             });
-        map.into_iter()
-            .map(|(doc, mut highlights)| {
-                highlights.sort();
-                SearchResult { doc: doc, highlights: highlights }
-            })
-        .collect()
+        let results = map.into_iter()
+            .map(SearchResult::new_ as fn((Arc<Document>, Vec<(usize, usize)>)) -> SearchResult);
+        SearchResults { it: results }
+    }
+}
+
+pub struct SearchResults {
+    it: iter::Map<
+            IntoIter<Arc<Document>, Vec<(usize, usize)>>, 
+            fn((Arc<Document>, Vec<(usize, usize)>)) -> SearchResult>
+}
+
+impl Iterator for SearchResults {
+    type Item = SearchResult;
+    fn next(&mut self) -> Option<SearchResult> {
+        self.it.next()
     }
 }
 
@@ -185,8 +196,12 @@ pub struct SearchResult {
 }
 
 impl SearchResult {
-    #[cfg(test)]
-    fn new(doc: Arc<Document>, highlights: Vec<(usize, usize)>) -> SearchResult {
+    fn new_((doc, highlights): (Arc<Document>, Vec<(usize, usize)>)) -> SearchResult {
+        SearchResult::new(doc, highlights)
+    }
+
+    fn new(doc: Arc<Document>, mut highlights: Vec<(usize, usize)>) -> SearchResult {
+        highlights.sort();
         SearchResult {
             doc: doc,
             highlights: highlights,
