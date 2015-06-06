@@ -159,7 +159,8 @@ impl InvertedIndex {
     /// A basic search implementation that splits the query's content into whitespace-separated
     /// words, looks up the set of Documents for each word, and then concatenates the sets.
     pub fn search(&self, query: &str) -> Vec<SearchResult> {
-        let map = query.split_whitespace()
+        let unique_terms: HashSet<_> = query.split_whitespace().collect();
+        let map = unique_terms.into_iter()
             .flat_map(|word| self.index.get(&word.to_lowercase()))
             .flat_map(|doc| doc)
             .cloned()
@@ -315,3 +316,13 @@ fn test_ranking() {
     assert_eq!(index.docs.len(), 2);
     assert_eq!(&*search_results.into_iter().next().unwrap().doc, &doc);
 }
+
+#[test]
+fn test_duplicate_term() {
+    let mut index = InvertedIndex::new();    
+    let doc = Document::new("0", "beat");
+    index.index(doc.clone());
+    let search_results = index.search("be be");
+    assert_eq!(search_results.len(), 1);
+}
+
