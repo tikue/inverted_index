@@ -224,7 +224,9 @@ impl SearchResult {
 
     fn new(doc: Arc<Document>, mut highlights: Vec<(usize, usize)>) -> SearchResult {
         SearchResult {
-            score: highlights.iter().map(|&(begin, end)| end - begin).sum::<usize>() as f32 / doc.content.len() as f32,
+            score: highlights.iter()
+                .map(|&(begin, end)| end - begin)
+                .sum::<usize>() as f32 / doc.content.len() as f32,
             highlighted: SearchResult::highlighted_content(&doc.content, &mut highlights),
             doc: doc,
             highlights: highlights,
