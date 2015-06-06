@@ -1,5 +1,6 @@
 #![feature(collections, unboxed_closures, core)]
 extern crate itertools;
+extern crate rustc_serialize;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::hash::{Hash, Hasher};
@@ -11,7 +12,7 @@ use itertools::{GroupBy, Itertools};
  
 /// A Document contains an id and content.
 /// Hashing and equality are based only on the id field.
-#[derive(Clone, Eq, Debug)]
+#[derive(Clone, Eq, Debug, RustcEncodable)]
 pub struct Document {
     id: String,
     content: String,
@@ -183,7 +184,7 @@ impl InvertedIndex {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, RustcEncodable)]
 pub struct SearchResult {
     doc: Arc<Document>,
     highlights: Vec<(usize, usize)>,

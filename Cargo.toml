@@ -3,5 +3,6 @@ name = "inverted_index"
 version = "0.1.0"
 authors = ["Tim Kuehn <tim@solvvy.com>"]
 
-[dependencies.itertools]
-version = ">= 0.3.12"
+[dependencies]
+itertools = "*"
+rustc-serialize = "*"
