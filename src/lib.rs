@@ -12,7 +12,7 @@ use itertools::{GroupBy, Itertools};
  
 /// A Document contains an id and content.
 /// Hashing and equality are based only on the id field.
-#[derive(Clone, Eq, Debug, RustcEncodable)]
+#[derive(Clone, Eq, Debug, RustcEncodable, RustcDecodable)]
 pub struct Document {
     id: String,
     content: String,
