@@ -39,7 +39,7 @@ impl Document {
  
 impl Hash for Document {
     fn hash<H>(&self, state: &mut H) where H: Hasher {
-        state.write(self.id.as_bytes());
+        self.id.hash(state);
     }
 }
  
@@ -193,6 +193,13 @@ impl PartialEq for SearchResult {
 }
 
 impl Eq for SearchResult {}
+
+impl Hash for SearchResult {
+    fn hash<H>(&self, state: &mut H) where H: Hasher {
+        self.doc.hash(state);
+        self.highlights.hash(state);
+    }
+}
 
 impl SearchResult {
     pub fn doc(&self) -> &Arc<Document> {
