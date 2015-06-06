@@ -3,6 +3,7 @@ extern crate itertools;
 extern crate rustc_serialize;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::hash_map::Entry::*;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use std::iter;
@@ -86,6 +87,17 @@ impl Hash for SearchResult {
 }
 
 impl SearchResult {
+    fn new(doc: Arc<Document>, mut highlights: Vec<(usize, usize)>) -> SearchResult {
+        SearchResult {
+            score: highlights.iter()
+                .map(|&(begin, end)| end - begin)
+                .sum::<usize>() as f32 / (doc.content.len() as f32).sqrt(),
+            highlighted: SearchResult::highlighted_content(&doc.content, &mut highlights),
+            doc: doc,
+            highlights: highlights,
+        }
+    }
+
     /// Returns the document
     pub fn doc(&self) -> &Arc<Document> {
         &self.doc
@@ -114,21 +126,6 @@ impl SearchResult {
     /// helps to combat bias toward short content.
     pub fn score(&self) -> f32 {
         self.score
-    }
-
-    fn new_((doc, highlights): (Arc<Document>, Vec<(usize, usize)>)) -> SearchResult {
-        SearchResult::new(doc, highlights)
-    }
-
-    fn new(doc: Arc<Document>, mut highlights: Vec<(usize, usize)>) -> SearchResult {
-        SearchResult {
-            score: highlights.iter()
-                .map(|&(begin, end)| end - begin)
-                .sum::<usize>() as f32 / (doc.content.len() as f32).sqrt(),
-            highlighted: SearchResult::highlighted_content(&doc.content, &mut highlights),
-            doc: doc,
-            highlights: highlights,
-        }
     }
 
     fn highlighted_content(content: &str, highlights: &mut [(usize, usize)]) -> String {
@@ -197,14 +194,27 @@ impl InvertedIndex {
             .flat_map(|word| self.index.get(&word.to_lowercase()))
             .flat_map(|doc| doc)
             .cloned()
-            .fold(HashMap::new(), |mut map, search_result| {
-                map.entry(search_result.doc)
-                    .or_insert(Vec::new())
-                    .push(search_result.highlighted);
+            .fold(HashMap::new(), |mut map, IndexedDocument { doc, highlighted: (begin, end) }| {
+                match map.entry(doc) {
+                    Vacant(entry) => { 
+                        let mut indices = HashMap::new();
+                        indices.insert(begin, end);
+                        entry.insert(indices);
+                    }
+                    Occupied(mut entry) => {
+                        match entry.get_mut().entry(begin) {
+                            Vacant(entry) => { entry.insert(end); }
+                            Occupied(mut entry) => {
+                                let current = entry.get_mut();
+                                *current = std::cmp::max(*current, end);
+                            }
+                        }
+                    }
+                }
                 map
             });
         let mut results: Vec<_> = map.into_iter()
-            .map(SearchResult::new_)
+            .map(|(doc, index_map)| SearchResult::new(doc, index_map.into_iter().collect()))
             .collect();
         results.sort_by(|result1, result2| result2.score.partial_cmp(&result1.score).unwrap());
         results
@@ -364,3 +374,12 @@ fn test_duplicate_term() {
     assert_eq!(search_results.len(), 1);
 }
 
+#[test]
+fn test_duplicate_term2() {
+    let mut index = InvertedIndex::new();    
+    let doc = Document::new("0", "beat");
+    index.index(doc.clone());
+    let search_results = index.search("be b");
+    assert_eq!(search_results.len(), 1);
+    assert_eq!(search_results[0], SearchResult::new(Arc::new(doc), vec![(0, 2)]));
+}
