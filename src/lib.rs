@@ -38,12 +38,14 @@ impl Document {
 }
  
 impl Hash for Document {
+    // Documents are unique only upon their id
     fn hash<H>(&self, state: &mut H) where H: Hasher {
         self.id.hash(state);
     }
 }
  
 impl PartialEq<Document> for Document {
+    // Documents are unique only upon their id
     fn eq(&self, other: &Document) -> bool {
         self.id == other.id
     }
@@ -55,63 +57,94 @@ struct IndexedDocument {
     pub highlighted: (usize, usize),
 }
  
-fn ngrams((_, chars): (bool, Vec<(usize, char)>)) -> iter::Map<ops::Range<usize>, Ngrams> {
-    (1..chars.len() + 1).map(Ngrams::new(chars))
+/// A SearchResult is the representation of a Document returned for a specific set of search
+/// terms. It is unique upon the document and the vec of highlight indices. It also contains a
+/// score and a String of the document's content post-highlighting.
+#[derive(Clone, Debug, RustcEncodable)]
+pub struct SearchResult {
+    doc: Arc<Document>,
+    highlights: Vec<(usize, usize)>,
+    highlighted: String,
+    score: f32,
 }
 
-fn not_whitespace(&(is_whitespace, _): &(bool, Vec<(usize, char)>)) -> bool {
-    !is_whitespace
-}
-
-fn is_whitespace(&(_, c): &(usize, char)) -> bool {
-    c.is_whitespace()
-}
-
-struct Ngrams {
-    chars: Vec<(usize, char)>
-}
-
-impl Ngrams {
-    fn new(chars: Vec<(usize, char)>) -> Ngrams {
-        Ngrams { chars: chars }
+impl PartialEq for SearchResult {
+    // SearchResult is unique upon its document and highlights
+    fn eq(&self, other: &SearchResult) -> bool {
+        self.doc == other.doc && self.highlights == other.highlights
     }
 }
 
-impl Fn<(usize,)> for Ngrams {
-    extern "rust-call" fn call(&self, (to,): (usize,)) -> (String, (usize, usize)) {
-        let word = self.chars[..to].iter().flat_map(|&(_, c)| c.to_lowercase()).collect();
-        let start = self.chars[0].0;
-        let (last_idx, last_char) = self.chars[to - 1];
-        let finish = last_idx + last_char.len_utf8();
-        (word, (start, finish))
+impl Eq for SearchResult {}
+
+impl Hash for SearchResult {
+    // SearchResult is unique upon its document and highlights
+    fn hash<H>(&self, state: &mut H) where H: Hasher {
+        self.doc.hash(state);
+        self.highlights.hash(state);
     }
 }
 
-impl FnMut<(usize,)> for Ngrams {
-    extern "rust-call" fn call_mut(&mut self, to: (usize,)) -> (String, (usize, usize)) {
-        self.call(to)
+impl SearchResult {
+    /// Returns the document
+    pub fn doc(&self) -> &Arc<Document> {
+        &self.doc
     }
-}
 
-impl FnOnce<(usize,)> for Ngrams {
-    type Output = (String, (usize, usize));
-    extern "rust-call" fn call_once(self, to: (usize,)) -> (String, (usize, usize)) {
-        self.call(to)
+    /// Returns the highlighted indices.
+    ///
+    /// Each `(usize, usize)` indicates the start and end of a term in the document's content
+    /// that should be highlighted.
+    pub fn highlights(&self) -> &Vec<(usize, usize)> {
+        &self.highlights
     }
-}
 
-fn analyze_doc(doc: &str) 
--> iter::FlatMap<
-    iter::Filter<
-        GroupBy<bool, std::str::CharIndices, fn(&(usize, char)) -> bool>, 
-        fn(&(bool, Vec<(usize, char)>)) -> bool>, 
-    iter::Map<ops::Range<usize>, Ngrams>,
-    fn((bool, Vec<(usize, char)>)) -> iter::Map<ops::Range<usize>, Ngrams>> 
-{
-    doc.char_indices()
-        .group_by(is_whitespace as fn(&(usize, char)) -> bool)
-        .filter(not_whitespace as fn(&(bool, Vec<(usize, char)>)) -> bool)
-        .flat_map(ngrams)
+    /// Returns the highlighted content.
+    ///
+    /// The highlighted content is the result of splicing in `<span class=highlight></span>` tags
+    /// around words that should be highlighted.
+    pub fn highlighted(&self) -> &String {
+        &self.highlighted
+    }
+
+    /// Returns the search result's score.
+    ///
+    /// Score is computed by the product of the summed length of the matching terms and the inverse
+    /// square root of the length of the document. Taking the square root of the document's length
+    /// helps to combat bias toward short content.
+    pub fn score(&self) -> f32 {
+        self.score
+    }
+
+    fn new_((doc, highlights): (Arc<Document>, Vec<(usize, usize)>)) -> SearchResult {
+        SearchResult::new(doc, highlights)
+    }
+
+    fn new(doc: Arc<Document>, mut highlights: Vec<(usize, usize)>) -> SearchResult {
+        SearchResult {
+            score: highlights.iter()
+                .map(|&(begin, end)| end - begin)
+                .sum::<usize>() as f32 / (doc.content.len() as f32).sqrt(),
+            highlighted: SearchResult::highlighted_content(&doc.content, &mut highlights),
+            doc: doc,
+            highlights: highlights,
+        }
+    }
+
+    fn highlighted_content(content: &str, highlights: &mut [(usize, usize)]) -> String {
+        highlights.sort();
+        let mut begin_idx = 0;
+        let mut parts = vec![];
+        for &mut (begin, end) in highlights {
+            parts.push(&content[begin_idx..begin]);
+            parts.push("<span class=highlight>");
+            parts.push(&content[begin..end]);
+            parts.push("</span>");
+            begin_idx = end;
+        }
+        parts.push(&content[begin_idx..]);
+        parts.into_iter().join("")
+    }
 }
 
 /// A basic implementation of an `Index`, the inverted index is a data structure that maps
@@ -178,74 +211,62 @@ impl InvertedIndex {
     }
 }
 
-#[derive(Clone, Debug, RustcEncodable)]
-pub struct SearchResult {
-    doc: Arc<Document>,
-    highlights: Vec<(usize, usize)>,
-    highlighted: String,
-    score: f32,
+fn analyze_doc(doc: &str) 
+-> iter::FlatMap<
+    iter::Filter<
+        GroupBy<bool, std::str::CharIndices, fn(&(usize, char)) -> bool>, 
+        fn(&(bool, Vec<(usize, char)>)) -> bool>, 
+    iter::Map<ops::Range<usize>, Ngrams>,
+    fn((bool, Vec<(usize, char)>)) -> iter::Map<ops::Range<usize>, Ngrams>> 
+{
+    doc.char_indices()
+        .group_by(is_whitespace as fn(&(usize, char)) -> bool)
+        .filter(not_whitespace as fn(&(bool, Vec<(usize, char)>)) -> bool)
+        .flat_map(ngrams)
 }
 
-impl PartialEq for SearchResult {
-    fn eq(&self, other: &SearchResult) -> bool {
-        self.doc == other.doc && self.highlights == other.highlights
+fn ngrams((_, chars): (bool, Vec<(usize, char)>)) -> iter::Map<ops::Range<usize>, Ngrams> {
+    (1..chars.len() + 1).map(Ngrams::new(chars))
+}
+
+fn not_whitespace(&(is_whitespace, _): &(bool, Vec<(usize, char)>)) -> bool {
+    !is_whitespace
+}
+
+fn is_whitespace(&(_, c): &(usize, char)) -> bool {
+    c.is_whitespace()
+}
+
+struct Ngrams {
+    chars: Vec<(usize, char)>
+}
+
+impl Ngrams {
+    fn new(chars: Vec<(usize, char)>) -> Ngrams {
+        Ngrams { chars: chars }
     }
 }
 
-impl Eq for SearchResult {}
-
-impl Hash for SearchResult {
-    fn hash<H>(&self, state: &mut H) where H: Hasher {
-        self.doc.hash(state);
-        self.highlights.hash(state);
+impl Fn<(usize,)> for Ngrams {
+    extern "rust-call" fn call(&self, (to,): (usize,)) -> (String, (usize, usize)) {
+        let word = self.chars[..to].iter().flat_map(|&(_, c)| c.to_lowercase()).collect();
+        let start = self.chars[0].0;
+        let (last_idx, last_char) = self.chars[to - 1];
+        let finish = last_idx + last_char.len_utf8();
+        (word, (start, finish))
     }
 }
 
-impl SearchResult {
-    pub fn doc(&self) -> &Arc<Document> {
-        &self.doc
+impl FnMut<(usize,)> for Ngrams {
+    extern "rust-call" fn call_mut(&mut self, to: (usize,)) -> (String, (usize, usize)) {
+        self.call(to)
     }
+}
 
-    pub fn highlights(&self) -> &Vec<(usize, usize)> {
-        &self.highlights
-    }
-
-    pub fn highlighted(&self) -> &String {
-        &self.highlighted
-    }
-
-    pub fn score(&self) -> f32 {
-        self.score
-    }
-
-    fn new_((doc, highlights): (Arc<Document>, Vec<(usize, usize)>)) -> SearchResult {
-        SearchResult::new(doc, highlights)
-    }
-
-    fn new(doc: Arc<Document>, mut highlights: Vec<(usize, usize)>) -> SearchResult {
-        SearchResult {
-            score: highlights.iter()
-                .map(|&(begin, end)| end - begin)
-                .sum::<usize>() as f32 / doc.content.len() as f32,
-            highlighted: SearchResult::highlighted_content(&doc.content, &mut highlights),
-            doc: doc,
-            highlights: highlights,
-        }
-    }
-
-    fn highlighted_content(content: &str, highlights: &mut [(usize, usize)]) -> String {
-        highlights.sort();
-        let mut begin_idx = 0;
-        let mut parts = vec![];
-        for &mut (begin, end) in highlights {
-            parts.push(&content[begin_idx..begin]);
-            parts.push("<span class=highlight>");
-            parts.push(&content[begin..end]);
-            parts.push("</span>");
-            begin_idx = end;
-        }
-        parts.push(&content[begin_idx..]);
-        parts.into_iter().join("")
+impl FnOnce<(usize,)> for Ngrams {
+    type Output = (String, (usize, usize));
+    extern "rust-call" fn call_once(self, to: (usize,)) -> (String, (usize, usize)) {
+        self.call(to)
     }
 }
 
