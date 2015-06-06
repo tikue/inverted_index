@@ -18,12 +18,6 @@ pub struct Document {
     content: String,
 }
 
-impl Drop for Document {
-    fn drop(&mut self) {
-        println!("Dropped doc {}", self.id);
-    }
-}
-
 impl Document {
     /// Construct a new Document from an id and content.
     /// Both two arguments can be anything that can be turned into a String.
