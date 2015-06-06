@@ -178,13 +178,21 @@ impl InvertedIndex {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, RustcEncodable)]
+#[derive(Clone, Debug, RustcEncodable)]
 pub struct SearchResult {
     doc: Arc<Document>,
     highlights: Vec<(usize, usize)>,
     highlighted: String,
-    score: f64,
+    score: f32,
 }
+
+impl PartialEq for SearchResult {
+    fn eq(&self, other: &SearchResult) -> bool {
+        self.doc == other.doc && self.highlights == other.highlights
+    }
+}
+
+impl Eq for SearchResult {}
 
 impl SearchResult {
     pub fn doc(&self) -> &Arc<Document> {
@@ -199,7 +207,7 @@ impl SearchResult {
         &self.highlighted
     }
 
-    pub fn score(&self) -> f64 {
+    pub fn score(&self) -> f32 {
         self.score
     }
 
@@ -209,7 +217,7 @@ impl SearchResult {
 
     fn new(doc: Arc<Document>, mut highlights: Vec<(usize, usize)>) -> SearchResult {
         SearchResult {
-            score: highlights.iter().map(|&(begin, end)| end - begin).sum::<usize>() as f64 / doc.content.len() as f64,
+            score: highlights.iter().map(|&(begin, end)| end - begin).sum::<usize>() as f32 / doc.content.len() as f32,
             highlighted: SearchResult::highlighted_content(&doc.content, &mut highlights),
             doc: doc,
             highlights: highlights,
