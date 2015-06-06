@@ -179,9 +179,10 @@ impl InvertedIndex {
 
 #[derive(Clone, Debug, PartialEq, RustcEncodable)]
 pub struct SearchResult {
-    doc: Arc<Document>,
-    highlights: Vec<(usize, usize)>,
-    score: f64,
+    pub doc: Arc<Document>,
+    pub highlights: Vec<(usize, usize)>,
+    pub highlighted: String,
+    pub score: f64,
 }
 
 impl SearchResult {
@@ -190,28 +191,19 @@ impl SearchResult {
     }
 
     fn new(doc: Arc<Document>, mut highlights: Vec<(usize, usize)>) -> SearchResult {
-        highlights.sort();
         SearchResult {
             score: highlights.iter().map(|&(begin, end)| end - begin).sum::<usize>() as f64 / doc.content.len() as f64,
+            highlighted: SearchResult::highlighted_content(&doc.content, &mut highlights),
             doc: doc,
             highlights: highlights,
         }
     }
 
-    pub fn doc(&self) -> &Arc<Document> {
-        &self.doc
-    }
-
-    pub fn highlights(&self) -> &Vec<(usize, usize)> {
-        &self.highlights
-    }
-
-    pub fn highlighted_content(&self) -> String {
-        let &SearchResult {ref doc, ref highlights, .. } = self;
-        let content = doc.content();
+    fn highlighted_content(content: &str, highlights: &mut [(usize, usize)]) -> String {
+        highlights.sort();
         let mut begin_idx = 0;
         let mut parts = vec![];
-        for &(begin, end) in highlights {
+        for &mut (begin, end) in highlights {
             parts.push(&content[begin_idx..begin]);
             parts.push("<span class=highlight>");
             parts.push(&content[begin..end]);
@@ -236,7 +228,7 @@ fn test_search1() {
         SearchResult::new(Arc::new(doc2), vec![(13, 15)])
     ];
     assert_eq!(search_results, expected.iter().cloned().collect::<Vec<_>>());
-    assert_eq!("learn <span class=highlight>to</span> program in rust <span class=highlight>to</span>day", expected[0].highlighted_content());
+    assert_eq!("learn <span class=highlight>to</span> program in rust <span class=highlight>to</span>day", expected[0].highlighted);
 }
 
 #[test]
@@ -252,7 +244,7 @@ fn test_ngrams() {
         SearchResult::new(Arc::new(doc2), vec![(13, 15)]),
     ];
     assert_eq!(search_results, expected.iter().cloned().collect::<Vec<_>>());
-    assert_eq!("learn <span class=highlight>to</span> program in rust <span class=highlight>to</span>day", expected[0].highlighted_content());
+    assert_eq!("learn <span class=highlight>to</span> program in rust <span class=highlight>to</span>day", expected[0].highlighted);
 
 }
 
@@ -269,7 +261,7 @@ fn test_search2() {
         SearchResult::new(Arc::new(doc2), vec![(4, 6)]),
     ];
     assert_eq!(search_results, expected.iter().cloned().collect::<Vec<_>>());
-    assert_eq!(expected[0].highlighted_content(), "what <span class=highlight>to</span> do <span class=highlight>to</span>day");
+    assert_eq!(expected[0].highlighted, "what <span class=highlight>to</span> do <span class=highlight>to</span>day");
 }
 
 #[test]
