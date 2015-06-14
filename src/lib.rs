@@ -282,7 +282,8 @@ fn test_search1() {
         SearchResult::new(Arc::new(doc2), vec![(13, 15)])
     ];
     assert_eq!(search_results, expected.iter().cloned().collect::<Vec<_>>());
-    assert_eq!("learn <span class=highlight>to</span> program in rust <span class=highlight>to</span>day", expected[0].highlighted);
+    assert_eq!("learn <span class=highlight>to</span> program in rust <span class=highlight>to</span>day", 
+               expected[0].highlight("<span class=highlight>", "</span>"));
 }
 
 #[test]
@@ -298,7 +299,7 @@ fn test_ngrams() {
         SearchResult::new(Arc::new(doc2), vec![(13, 15)]),
     ];
     assert_eq!(search_results, expected.iter().cloned().collect::<Vec<_>>());
-    assert_eq!("learn <span class=highlight>to</span> program in rust <span class=highlight>to</span>day", expected[0].highlighted);
+    assert_eq!("learn <span class=highlight>to</span> program in rust <span class=highlight>to</span>day", expected[0].highlight("<span class=highlight>", "</span>"));
 
 }
 
@@ -315,15 +316,16 @@ fn test_search2() {
         SearchResult::new(Arc::new(doc2), vec![(4, 6)]),
     ];
     assert_eq!(search_results, expected.iter().cloned().collect::<Vec<_>>());
-    assert_eq!(expected[0].highlighted, "what <span class=highlight>to</span> do <span class=highlight>to</span>day");
+    assert_eq!("what <span class=highlight>to</span> do <span class=highlight>to</span>day",
+               expected[0].highlight("<span class=highlight>", "</span>"));
 }
 
 #[test]
 fn test_unicode() {
     let mut index = InvertedIndex::new();    
-    let doc = Document::new("0", "abc åäö");
+    let doc = Document::new("0", "嗨, 您好");
     index.index(doc.clone());
-    let to_search = "å";
+    let to_search = "您";
     let search_results = index.search(to_search);
     let &SearchResult { ref doc, ref highlights, .. } = search_results.iter().next().unwrap();
     let (begin, end) = highlights[0];
