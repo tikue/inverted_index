@@ -65,7 +65,6 @@ struct IndexedDocument {
 pub struct SearchResult {
     doc: Arc<Document>,
     highlights: Vec<(usize, usize)>,
-    highlighted: String,
     score: f32,
 }
 
@@ -92,9 +91,8 @@ impl SearchResult {
             score: highlights.iter()
                 .map(|&(begin, end)| end - begin)
                 .sum::<usize>() as f32 / (doc.content.len() as f32).sqrt(),
-            highlighted: SearchResult::highlighted_content(&doc.content, &mut highlights),
             doc: doc,
-            highlights: highlights,
+            highlights: { highlights.sort(); highlights },
         }
     }
 
@@ -111,14 +109,6 @@ impl SearchResult {
         &self.highlights
     }
 
-    /// Returns the highlighted content.
-    ///
-    /// The highlighted content is the result of splicing in `<span class=highlight></span>` tags
-    /// around words that should be highlighted.
-    pub fn highlighted(&self) -> &String {
-        &self.highlighted
-    }
-
     /// Returns the search result's score.
     ///
     /// Score is computed by the product of the summed length of the matching terms and the inverse
@@ -128,19 +118,18 @@ impl SearchResult {
         self.score
     }
 
-    fn highlighted_content(content: &str, highlights: &mut [(usize, usize)]) -> String {
-        highlights.sort();
+    pub fn highlight(&self, before: &str, after: &str) -> String {
         let mut begin_idx = 0;
-        let mut parts = vec![];
-        for &mut (begin, end) in highlights {
-            parts.push(&content[begin_idx..begin]);
-            parts.push("<span class=highlight>");
-            parts.push(&content[begin..end]);
-            parts.push("</span>");
+        let mut parts = String::new();
+        for &(begin, end) in &self.highlights {
+            parts.push_str(&self.doc.content[begin_idx..begin]);
+            parts.push_str(before);
+            parts.push_str(&self.doc.content[begin..end]);
+            parts.push_str(after);
             begin_idx = end;
         }
-        parts.push(&content[begin_idx..]);
-        parts.into_iter().join("")
+        parts.push_str(&self.doc.content[begin_idx..]);
+        parts
     }
 }
 
