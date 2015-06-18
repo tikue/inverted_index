@@ -1,6 +1,7 @@
 #![feature(collections, unboxed_closures, core, test)]
 extern crate itertools;
 extern crate rustc_serialize;
+extern crate sequence_trie;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::collections::hash_map::Entry::*;
@@ -9,6 +10,7 @@ use std::sync::Arc;
 use std::iter;
 use std::ops;
 use itertools::{GroupBy, Itertools};
+use sequence_trie::SequenceTrie;
  
 /// A Document contains an id and content.
 /// Hashing and equality are based only on the id field.
@@ -136,14 +138,14 @@ impl SearchResult {
 /// from words to sets of Documents.
 #[derive(Debug)]
 pub struct InvertedIndex {
-    index: BTreeMap<String, HashSet<IndexedDocument>>,
+    index: SequenceTrie<char, HashSet<IndexedDocument>>,
     docs: BTreeMap<String, Arc<Document>>,
 }
  
 impl InvertedIndex {
     pub fn new() -> InvertedIndex {
         InvertedIndex {
-            index: BTreeMap::new(),
+            index: SequenceTrie::new(),
             docs: BTreeMap::new(),
         }
     }
@@ -169,15 +171,28 @@ impl InvertedIndex {
         }
 
         for (ngram, highlighted) in analyzed {
-            self.index.entry(ngram).or_insert_with(|| HashSet::new())
-                .insert(IndexedDocument { doc: doc.clone(), highlighted: highlighted });
+            if {
+                if let Some(set) = self.index.get_mut(&ngram) {
+                    set.insert(IndexedDocument { doc: doc.clone(), highlighted: highlighted });
+                    false
+                } else {
+                    true
+                }
+            } {
+                let mut set = HashSet::new();
+                set.insert(IndexedDocument { doc: doc.clone(), highlighted: highlighted });
+                self.index.insert(&ngram, set);
+            }
         }
     }
  
     /// A basic search implementation that splits the query's content into whitespace-separated
     /// words, looks up the set of Documents for each word, and then concatenates the sets.
     pub fn search(&self, query: &str) -> Vec<SearchResult> {
-        let unique_terms: HashSet<_> = query.split_whitespace().map(str::to_lowercase).collect();
+        let unique_terms: HashSet<Vec<_>> = query.split_whitespace()
+            .map(str::to_lowercase)
+            .map(|s| s.chars().collect())
+            .collect();
         let map = unique_terms.into_iter()
             .flat_map(|word| self.index.get(&word))
             .flat_map(|doc| doc)
@@ -246,7 +261,7 @@ impl Ngrams {
 }
 
 impl Fn<(usize,)> for Ngrams {
-    extern "rust-call" fn call(&self, (to,): (usize,)) -> (String, (usize, usize)) {
+    extern "rust-call" fn call(&self, (to,): (usize,)) -> (Vec<char>, (usize, usize)) {
         let word = self.chars[..to].iter().flat_map(|&(_, c)| c.to_lowercase()).collect();
         let start = self.chars[0].0;
         let (last_idx, last_char) = self.chars[to - 1];
@@ -256,14 +271,14 @@ impl Fn<(usize,)> for Ngrams {
 }
 
 impl FnMut<(usize,)> for Ngrams {
-    extern "rust-call" fn call_mut(&mut self, to: (usize,)) -> (String, (usize, usize)) {
+    extern "rust-call" fn call_mut(&mut self, to: (usize,)) -> (Vec<char>, (usize, usize)) {
         self.call(to)
     }
 }
 
 impl FnOnce<(usize,)> for Ngrams {
-    type Output = (String, (usize, usize));
-    extern "rust-call" fn call_once(self, to: (usize,)) -> (String, (usize, usize)) {
+    type Output = (Vec<char>, (usize, usize));
+    extern "rust-call" fn call_once(self, to: (usize,)) -> (Vec<char>, (usize, usize)) {
         self.call(to)
     }
 }

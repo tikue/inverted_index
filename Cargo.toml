@@ -6,3 +6,4 @@ authors = ["Tim Kuehn <tim@solvvy.com>"]
 [dependencies]
 itertools = "*"
 rustc-serialize = "*"
+sequence_trie = "*"
