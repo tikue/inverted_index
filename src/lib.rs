@@ -1,4 +1,4 @@
-#![feature(collections, unboxed_closures, core)]
+#![feature(collections, unboxed_closures, core, test)]
 extern crate itertools;
 extern crate rustc_serialize;
 
@@ -8,7 +8,6 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use std::iter;
 use std::ops;
-
 use itertools::{GroupBy, Itertools};
  
 /// A Document contains an id and content.
@@ -178,9 +177,9 @@ impl InvertedIndex {
     /// A basic search implementation that splits the query's content into whitespace-separated
     /// words, looks up the set of Documents for each word, and then concatenates the sets.
     pub fn search(&self, query: &str) -> Vec<SearchResult> {
-        let unique_terms: HashSet<_> = query.split_whitespace().collect();
+        let unique_terms: HashSet<_> = query.split_whitespace().map(str::to_lowercase).collect();
         let map = unique_terms.into_iter()
-            .flat_map(|word| self.index.get(&word.to_lowercase()))
+            .flat_map(|word| self.index.get(&word))
             .flat_map(|doc| doc)
             .cloned()
             .fold(HashMap::new(), |mut map, IndexedDocument { doc, highlighted: (begin, end) }| {
@@ -269,108 +268,152 @@ impl FnOnce<(usize,)> for Ngrams {
     }
 }
 
-#[test]
-fn test_search1() {
-    let mut index = InvertedIndex::new();    
-    let doc1 = Document::new("1", "learn to program in rust today");
-    index.index(doc1.clone());
-    let doc2 = Document::new("2", "what did you today do");
-    index.index(doc2.clone());
-    let search_results = index.search("to");
-    let expected = [
-        SearchResult::new(Arc::new(doc1), vec![(6, 8), (25, 27)]),
-        SearchResult::new(Arc::new(doc2), vec![(13, 15)])
-    ];
-    assert_eq!(search_results, expected.iter().cloned().collect::<Vec<_>>());
-    assert_eq!("learn <span class=highlight>to</span> program in rust <span class=highlight>to</span>day", 
-               expected[0].highlight("<span class=highlight>", "</span>"));
-}
+#[cfg(test)]
+mod bench {
+    extern crate test;
+    use super::*;
+    use self::test::Bencher;
+    use std::sync::Arc;
 
-#[test]
-fn test_ngrams() {
-    let mut index = InvertedIndex::new();    
-    let doc1 = Document::new("1", "learn to program in rust today");
-    let doc2 = Document::new("2", "what did you today do");
-    index.index(doc1.clone());
-    index.index(doc2.clone());
-    let search_results = index.search("to");
-    let expected = [
-        SearchResult::new(Arc::new(doc1), vec![(6, 8), (25, 27)]),
-        SearchResult::new(Arc::new(doc2), vec![(13, 15)]),
-    ];
-    assert_eq!(search_results, expected.iter().cloned().collect::<Vec<_>>());
-    assert_eq!("learn <span class=highlight>to</span> program in rust <span class=highlight>to</span>day", expected[0].highlight("<span class=highlight>", "</span>"));
+    #[test]
+    fn test_search1() {
+        let mut index = InvertedIndex::new();    
+        let doc1 = Document::new("1", "learn to program in rust today");
+        index.index(doc1.clone());
+        let doc2 = Document::new("2", "what did you today do");
+        index.index(doc2.clone());
+        let search_results = index.search("to");
+        let expected = [
+            SearchResult::new(Arc::new(doc1), vec![(6, 8), (25, 27)]),
+            SearchResult::new(Arc::new(doc2), vec![(13, 15)])
+        ];
+        assert_eq!(search_results, expected.iter().cloned().collect::<Vec<_>>());
+        assert_eq!("learn <span class=highlight>to</span> program in rust <span class=highlight>to</span>day", 
+                   expected[0].highlight("<span class=highlight>", "</span>"));
+    }
 
-}
+    #[test]
+    fn test_ngrams() {
+        let mut index = InvertedIndex::new();    
+        let doc1 = Document::new("1", "learn to program in rust today");
+        let doc2 = Document::new("2", "what did you today do");
+        index.index(doc1.clone());
+        index.index(doc2.clone());
+        let search_results = index.search("to");
+        let expected = [
+            SearchResult::new(Arc::new(doc1), vec![(6, 8), (25, 27)]),
+            SearchResult::new(Arc::new(doc2), vec![(13, 15)]),
+        ];
+        assert_eq!(search_results, expected.iter().cloned().collect::<Vec<_>>());
+        assert_eq!("learn <span class=highlight>to</span> program in rust <span class=highlight>to</span>day", expected[0].highlight("<span class=highlight>", "</span>"));
 
-#[test]
-fn test_search2() {
-    let mut index = InvertedIndex::new();    
-    let doc1 = Document::new("2", "what to do today");
-    let doc2 = Document::new("3", "hey today");
-    index.index(doc1.clone());
-    index.index(doc2.clone());
-    let search_results = index.search("to");
-    let expected = [
-        SearchResult::new(Arc::new(doc1), vec![(5, 7), (11, 13)]),
-        SearchResult::new(Arc::new(doc2), vec![(4, 6)]),
-    ];
-    assert_eq!(search_results, expected.iter().cloned().collect::<Vec<_>>());
-    assert_eq!("what <span class=highlight>to</span> do <span class=highlight>to</span>day",
-               expected[0].highlight("<span class=highlight>", "</span>"));
-}
+    }
 
-#[test]
-fn test_unicode() {
-    let mut index = InvertedIndex::new();    
-    let doc = Document::new("0", "嗨, 您好");
-    index.index(doc.clone());
-    let to_search = "您";
-    let search_results = index.search(to_search);
-    let &SearchResult { ref doc, ref highlights, .. } = search_results.iter().next().unwrap();
-    let (begin, end) = highlights[0];
-    assert_eq!(&doc.content()[begin..end], to_search);
-}
+    #[test]
+    fn test_search2() {
+        let mut index = InvertedIndex::new();    
+        let doc1 = Document::new("2", "what to do today");
+        let doc2 = Document::new("3", "hey today");
+        index.index(doc1.clone());
+        index.index(doc2.clone());
+        let search_results = index.search("to");
+        let expected = [
+            SearchResult::new(Arc::new(doc1), vec![(5, 7), (11, 13)]),
+            SearchResult::new(Arc::new(doc2), vec![(4, 6)]),
+        ];
+        assert_eq!(search_results, expected.iter().cloned().collect::<Vec<_>>());
+        assert_eq!("what <span class=highlight>to</span> do <span class=highlight>to</span>day",
+                   expected[0].highlight("<span class=highlight>", "</span>"));
+    }
 
-#[test]
-fn test_update_doc() {
-    let mut index = InvertedIndex::new();    
-    let doc = Document::new("0", "abc åäö");
-    index.index(doc);
-    let doc = Document::new("0", "different");
-    index.index(doc);
-    let search_results = index.search("å");
-    assert!(search_results.is_empty());
-    assert_eq!(index.docs.len(), 1);
-}
+    #[test]
+    fn test_unicode() {
+        let mut index = InvertedIndex::new();    
+        let doc = Document::new("0", "嗨, 您好");
+        index.index(doc.clone());
+        let to_search = "您";
+        let search_results = index.search(to_search);
+        let &SearchResult { ref doc, ref highlights, .. } = search_results.iter().next().unwrap();
+        let (begin, end) = highlights[0];
+        assert_eq!(&doc.content()[begin..end], to_search);
+    }
 
-#[test]
-fn test_ranking() {
-    let mut index = InvertedIndex::new();    
-    let doc = Document::new("0", "beat");
-    index.index(doc.clone());
-    let doc2 = Document::new("1", "beast");
-    index.index(doc2.clone());
-    let search_results = index.search("be");
-    assert_eq!(index.docs.len(), 2);
-    assert_eq!(&*search_results.into_iter().next().unwrap().doc, &doc);
-}
+    #[test]
+    fn test_update_doc() {
+        let mut index = InvertedIndex::new();    
+        let doc = Document::new("0", "abc åäö");
+        index.index(doc);
+        let doc = Document::new("0", "different");
+        index.index(doc);
+        let search_results = index.search("å");
+        assert!(search_results.is_empty());
+        assert_eq!(index.docs.len(), 1);
+    }
 
-#[test]
-fn test_duplicate_term() {
-    let mut index = InvertedIndex::new();    
-    let doc = Document::new("0", "beat");
-    index.index(doc.clone());
-    let search_results = index.search("be be");
-    assert_eq!(search_results.len(), 1);
-}
+    #[test]
+    fn test_ranking() {
+        let mut index = InvertedIndex::new();    
+        let doc = Document::new("0", "beat");
+        index.index(doc.clone());
+        let doc2 = Document::new("1", "beast");
+        index.index(doc2.clone());
+        let search_results = index.search("be");
+        assert_eq!(index.docs.len(), 2);
+        assert_eq!(&*search_results.into_iter().next().unwrap().doc, &doc);
+    }
 
-#[test]
-fn test_duplicate_term2() {
-    let mut index = InvertedIndex::new();    
-    let doc = Document::new("0", "beat");
-    index.index(doc.clone());
-    let search_results = index.search("be b");
-    assert_eq!(search_results.len(), 1);
-    assert_eq!(search_results[0], SearchResult::new(Arc::new(doc), vec![(0, 2)]));
+    #[test]
+    fn test_duplicate_term() {
+        let mut index = InvertedIndex::new();    
+        let doc = Document::new("0", "beat");
+        index.index(doc.clone());
+        let search_results = index.search("be be");
+        assert_eq!(search_results.len(), 1);
+    }
+
+    #[test]
+    fn test_duplicate_term2() {
+        let mut index = InvertedIndex::new();    
+        let doc = Document::new("0", "beat");
+        index.index(doc.clone());
+        let search_results = index.search("be b");
+        assert_eq!(search_results.len(), 1);
+        assert_eq!(search_results[0], SearchResult::new(Arc::new(doc), vec![(0, 2)]));
+    }
+
+    #[test]
+    fn test_lowercase_search() {
+        let mut index = InvertedIndex::new();    
+        let doc = Document::new("0", "BeAt");
+        index.index(doc.clone());
+        let search_results = index.search("bE");
+        assert_eq!(search_results.len(), 1);
+        assert_eq!(search_results[0], SearchResult::new(Arc::new(doc), vec![(0, 2)]));
+    }
+
+    #[test]
+    fn test_lowercase_index() {
+        let mut index = InvertedIndex::new();    
+        let doc = Document::new("0", "BeAt");
+        index.index(doc.clone());
+        let search_results = index.search("be");
+        assert_eq!(search_results.len(), 1);
+        assert_eq!(search_results[0], SearchResult::new(Arc::new(doc), vec![(0, 2)]));
+    }
+
+
+    #[bench]
+    fn bench_search(b: &mut Bencher) {
+        let mut index = InvertedIndex::new();
+        for i in 0..26 {
+            index.index(Document::new(i.to_string(), (0..26).map(|j| ((i + j) % 26) as u8 as char).collect::<String>()));
+        }
+        b.iter(|| index.search("a"))
+    }
+
+    #[bench]
+    fn bench_index(b: &mut Bencher) {
+        let doc = Document::new("1", "Let's see you index this");
+        b.iter(|| InvertedIndex::new().index(doc.clone()));
+    }
 }
