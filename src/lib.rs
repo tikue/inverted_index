@@ -1,4 +1,4 @@
-#![feature(collections, unboxed_closures, core, test)]
+#![feature(collections, unboxed_closures, core)]
 extern crate itertools;
 extern crate rustc_serialize;
 
@@ -270,10 +270,9 @@ impl FnOnce<(usize,)> for Ngrams {
 
 #[cfg(test)]
 mod bench {
-    extern crate test;
     use super::*;
-    use self::test::Bencher;
     use std::sync::Arc;
+    use std::collections::HashSet;
 
     #[test]
     fn test_search1() {
@@ -288,7 +287,8 @@ mod bench {
             SearchResult::new(Arc::new(doc2), vec![(13, 15)])
         ];
         assert_eq!(search_results, expected.iter().cloned().collect::<Vec<_>>());
-        assert_eq!("learn <span class=highlight>to</span> program in rust <span class=highlight>to</span>day", 
+        assert_eq!("learn <span class=highlight>to</span> program in rust \
+                   <span class=highlight>to</span>day", 
                    expected[0].highlight("<span class=highlight>", "</span>"));
     }
 
@@ -305,12 +305,14 @@ mod bench {
             SearchResult::new(Arc::new(doc2), vec![(13, 15)]),
         ];
         assert_eq!(search_results, expected.iter().cloned().collect::<Vec<_>>());
-        assert_eq!("learn <span class=highlight>to</span> program in rust <span class=highlight>to</span>day", expected[0].highlight("<span class=highlight>", "</span>"));
+        assert_eq!("learn <span class=highlight>to</span> program in rust \
+                   <span class=highlight>to</span>day", 
+                   expected[0].highlight("<span class=highlight>", "</span>"));
 
     }
 
     #[test]
-    fn test_search2() {
+    fn test_highlight1() {
         let mut index = InvertedIndex::new();    
         let doc1 = Document::new("2", "what to do today");
         let doc2 = Document::new("3", "hey today");
@@ -321,9 +323,21 @@ mod bench {
             SearchResult::new(Arc::new(doc1), vec![(5, 7), (11, 13)]),
             SearchResult::new(Arc::new(doc2), vec![(4, 6)]),
         ];
-        assert_eq!(search_results, expected.iter().cloned().collect::<Vec<_>>());
+        assert_eq!(search_results.into_iter().collect::<HashSet<_>>(), 
+                   expected.iter().cloned().collect());
         assert_eq!("what <span class=highlight>to</span> do <span class=highlight>to</span>day",
                    expected[0].highlight("<span class=highlight>", "</span>"));
+    }
+
+    #[test]
+    fn test_highlight2() {
+        let mut index = InvertedIndex::new();    
+        let doc1 = Document::new("2", "Won\u{2019}t this split the ecosystem? Will everyone use?");
+        index.index(doc1.clone());
+        let expected =  "Won\u{2019}t this split the *e*cosystem? Will *e*veryone use?";
+        let search_results = index.search("e");
+        assert_eq!(1, search_results.len());
+        assert_eq!(search_results[0].highlight("*", "*"), expected);
     }
 
     #[test]
@@ -359,7 +373,8 @@ mod bench {
         index.index(doc2.clone());
         let search_results = index.search("be");
         assert_eq!(index.docs.len(), 2);
-        assert_eq!(&*search_results.into_iter().next().unwrap().doc, &doc);
+        assert_eq!(search_results.into_iter().map(|r| r.doc).collect::<HashSet<_>>(),
+                [Arc::new(doc), Arc::new(doc2)].iter().cloned().collect());
     }
 
     #[test]
@@ -399,21 +414,5 @@ mod bench {
         let search_results = index.search("be");
         assert_eq!(search_results.len(), 1);
         assert_eq!(search_results[0], SearchResult::new(Arc::new(doc), vec![(0, 2)]));
-    }
-
-
-    #[bench]
-    fn bench_search(b: &mut Bencher) {
-        let mut index = InvertedIndex::new();
-        for i in 0..26 {
-            index.index(Document::new(i.to_string(), (0..26).map(|j| ((i + j) % 26) as u8 as char).collect::<String>()));
-        }
-        b.iter(|| index.search("a"))
-    }
-
-    #[bench]
-    fn bench_index(b: &mut Bencher) {
-        let doc = Document::new("1", "Let's see you index this");
-        b.iter(|| InvertedIndex::new().index(doc.clone()));
     }
 }
