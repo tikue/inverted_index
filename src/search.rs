@@ -192,6 +192,7 @@ impl InvertedIndex {
     }
 }
 
+#[allow(unused_attributes)]
 #[rustfmt_skip]
 fn analyze_doc(doc: &str) ->
     iter::FlatMap<
