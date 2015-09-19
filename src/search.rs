@@ -185,13 +185,13 @@ impl InvertedIndex {
     }
 }
 
-fn analyze_doc(doc: &str) 
--> iter::FlatMap<
-    iter::Filter<
-        GroupBy<bool, CharIndices, fn(&(usize, char)) -> bool>, 
-        fn(&(bool, Vec<(usize, char)>)) -> bool>, 
-    iter::Map<ops::Range<usize>, Ngrams>,
-    fn((bool, Vec<(usize, char)>)) -> iter::Map<ops::Range<usize>, Ngrams>> 
+fn analyze_doc(doc: &str) -> 
+    iter::FlatMap<
+        iter::Filter<
+            GroupBy<bool, CharIndices, fn(&(usize, char)) -> bool>, 
+            fn(&(bool, Vec<(usize, char)>)) -> bool>, 
+        iter::Map<ops::Range<usize>, Ngrams>,
+        fn((bool, Vec<(usize, char)>)) -> iter::Map<ops::Range<usize>, Ngrams>> 
 {
     doc.char_indices()
         .group_by(is_whitespace as fn(&(usize, char)) -> bool)
