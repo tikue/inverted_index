@@ -56,7 +56,7 @@ impl PartialOrd for Document {
 
 /// A SearchResult is the representation of a Document returned for a specific set of search
 /// terms. It is unique upon the document and the vec of highlight indices. It also contains a
-/// score and a String of the document's content post-highlighting.
+/// search score for use in ranking against the other search results
 #[derive(Clone, Debug, RustcEncodable)]
 pub struct SearchResult<'a> {
     doc: &'a Document,
