@@ -51,12 +51,6 @@ impl PartialEq<Document> for Document {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
-struct IndexedDocument {
-    pub doc: Arc<Document>,
-    pub highlighted: (usize, usize),
-}
- 
 /// A SearchResult is the representation of a Document returned for a specific set of search
 /// terms. It is unique upon the document and the vec of highlight indices. It also contains a
 /// score and a String of the document's content post-highlighting.
@@ -136,7 +130,7 @@ impl SearchResult {
 /// from words to sets of Documents.
 #[derive(Debug)]
 pub struct InvertedIndex {
-    index: BTreeMap<String, HashSet<IndexedDocument>>,
+    index: BTreeMap<String, BTreeMap<String, Vec<(usize, usize)>>>,
     docs: BTreeMap<String, Arc<Document>>,
 }
  
@@ -159,7 +153,7 @@ impl InvertedIndex {
             for (ngram, highlights) in previous_analyzed {
                 let is_empty = {
                     let docs_for_ngram = self.index.get_mut(&ngram).unwrap();
-                    docs_for_ngram.remove(&IndexedDocument { doc: doc.clone(), highlighted: highlights });
+                    docs_for_ngram.remove(&doc.id);
                     docs_for_ngram.is_empty()
                 };
                 if is_empty {
@@ -169,8 +163,11 @@ impl InvertedIndex {
         }
 
         for (ngram, highlighted) in analyzed {
-            self.index.entry(ngram).or_insert_with(|| HashSet::new())
-                .insert(IndexedDocument { doc: doc.clone(), highlighted: highlighted });
+            self.index.entry(ngram)
+                .or_insert_with(BTreeMap::new)
+                .entry(doc.id.clone())
+                .or_insert_with(Vec::new)
+                .push(highlighted);
         }
     }
  
@@ -180,10 +177,10 @@ impl InvertedIndex {
         let unique_terms: HashSet<_> = query.split_whitespace().map(str::to_lowercase).collect();
         let map = unique_terms.into_iter()
             .flat_map(|word| self.index.get(&word))
-            .flat_map(|doc| doc)
+            .flat_map(BTreeMap::iter)
             .cloned()
-            .fold(HashMap::new(), |mut map, IndexedDocument { doc, highlighted: (begin, end) }| {
-                match map.entry(doc) {
+            .fold(HashMap::new(), |mut map, (docId, highlights)| {
+                match map.entry(docId) {
                     Vacant(entry) => { 
                         let mut indices = HashMap::new();
                         indices.insert(begin, end);
