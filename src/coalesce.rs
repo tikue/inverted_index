@@ -45,7 +45,7 @@ macro_rules! impl_merge_tuples {
             fn merge(self, (after, y): ($tp, $tp))  -> Option<($tp, $tp)> 
             {
                 let (x, before) = self;
-                if before == after { Some((x, y)) } else { None }
+                if before >= after { Some((x, y)) } else { None }
             }
         }
     )
