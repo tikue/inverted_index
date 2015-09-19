@@ -119,12 +119,18 @@ impl<'a> SearchResult<'a> {
 }
 
 /// A basic implementation of an `Index`, the inverted index is a data structure that maps
-/// from words to sets of Documents.
+/// from words to postings.
 #[derive(Debug)]
 pub struct InvertedIndex {
-    index: BTreeMap<String, BTreeMap<String, Vec<(usize, usize)>>>,
+    // Maps terms to their postings
+    index: BTreeMap<String, PostingsMap>,
+    // Maps doc ids to their docs
     docs: BTreeMap<String, Document>,
 }
+
+/// A Postings map (doc id => highlights) for a single term. 
+/// Records which Documents contain the term, and at which locations in the documents.
+pub type PostingsMap = BTreeMap<String, Vec<(usize, usize)>>;
 
 impl InvertedIndex {
     pub fn new() -> InvertedIndex {
