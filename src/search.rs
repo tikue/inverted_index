@@ -6,7 +6,7 @@ use std::str::CharIndices;
 use std::ops;
 use itertools::{GroupBy, Itertools};
 use coalesce::Coalesce;
- 
+
 /// A Document contains an id and content.
 /// Hashing and equality are based only on the id field.
 #[derive(Clone, Debug, Eq, Ord, RustcEncodable, RustcDecodable)]
@@ -20,9 +20,9 @@ impl Document {
     /// Both two arguments can be anything that can be turned into a String.
     pub fn new<S, T>(id: S, content: T) -> Document
         where S: Into<String>,
-              T: Into<String> 
+              T: Into<String>
     {
-        Document { id: id.into(), content: content.into(), }
+        Document { id: id.into(), content: content.into() }
     }
 
     pub fn id(&self) -> &str {
@@ -33,14 +33,16 @@ impl Document {
         &self.content
     }
 }
- 
+
 impl Hash for Document {
     // Documents are unique only upon their id
-    fn hash<H>(&self, state: &mut H) where H: Hasher {
+    fn hash<H>(&self, state: &mut H)
+        where H: Hasher
+    {
         self.id.hash(state);
     }
 }
- 
+
 impl PartialEq for Document {
     // Documents are unique only upon their id
     fn eq(&self, other: &Document) -> bool {
@@ -69,9 +71,13 @@ impl<'a> SearchResult<'a> {
         SearchResult {
             score: highlights.iter()
                 .map(|&(begin, end)| end - begin)
-                .sum::<usize>() as f32 / (doc.content.len() as f32).sqrt(),
+                .sum::<usize>() as f32 /
+                   (doc.content.len() as f32).sqrt(),
             doc: doc,
-            highlights: { highlights.sort(); highlights },
+            highlights: {
+                highlights.sort();
+                highlights
+            },
         }
     }
 
@@ -119,19 +125,16 @@ pub struct InvertedIndex {
     index: BTreeMap<String, BTreeMap<String, Vec<(usize, usize)>>>,
     docs: BTreeMap<String, Document>,
 }
- 
+
 impl InvertedIndex {
     pub fn new() -> InvertedIndex {
-        InvertedIndex {
-            index: BTreeMap::new(),
-            docs: BTreeMap::new(),
-        }
+        InvertedIndex { index: BTreeMap::new(), docs: BTreeMap::new() }
     }
 
     /// A basic implementation of index, splits the document's content into whitespace-separated
     /// words, and inserts each word-document pair into the map.
     pub fn index(&mut self, doc: Document) {
-        let analyzed  = analyze_doc(doc.content());
+        let analyzed = analyze_doc(doc.content());
         let previous_version = self.docs.insert(doc.id.clone(), doc.clone());
         if let Some(previous_version) = previous_version {
             let previous_analyzed = analyze_doc(previous_version.content());
@@ -148,15 +151,16 @@ impl InvertedIndex {
         }
 
         for (ngram, highlighted) in analyzed {
-            let mut highlights = self.index.entry(ngram)
-                .or_insert_with(BTreeMap::new)
-                .entry(doc.id.clone())
-                .or_insert_with(Vec::new);
+            let mut highlights = self.index
+                                     .entry(ngram)
+                                     .or_insert_with(BTreeMap::new)
+                                     .entry(doc.id.clone())
+                                     .or_insert_with(Vec::new);
             let coalesce_idx = highlights.binary_search(&highlighted).err().unwrap();
             highlights.coalesce(coalesce_idx, highlighted);
         }
     }
- 
+
     /// A basic search implementation that splits the query's content into whitespace-separated
     /// words, looks up the set of Documents for each word, and then concatenates the sets.
     pub fn search(&self, query: &str) -> Vec<SearchResult> {
@@ -171,27 +175,31 @@ impl InvertedIndex {
                         let entry: &mut Vec<(usize, usize)> = entry.get_mut();
                         for highlight in highlights {
                             let coalesce_idx = entry.binary_search(highlight).err().unwrap();
-                            entry.coalesce(coalesce_idx, highlight.clone()); 
+                            entry.coalesce(coalesce_idx, highlight.clone());
                         }
                     }
                 }
                 map
             });
         let mut results: Vec<_> = map.into_iter()
-            .map(|(doc_id, index_map)| SearchResult::new(&self.docs[&doc_id], index_map.into_iter().collect()))
-            .collect();
+                                     .map(|(doc_id, index_map)| {
+                                         SearchResult::new(&self.docs[&doc_id],
+                                                           index_map.into_iter().collect())
+                                     })
+                                     .collect();
         results.sort_by(|result1, result2| result2.score.partial_cmp(&result1.score).unwrap());
         results
     }
 }
 
-fn analyze_doc(doc: &str) -> 
+#[rustfmt_skip]
+fn analyze_doc(doc: &str) ->
     iter::FlatMap<
         iter::Filter<
-            GroupBy<bool, CharIndices, fn(&(usize, char)) -> bool>, 
-            fn(&(bool, Vec<(usize, char)>)) -> bool>, 
+            GroupBy<bool, CharIndices, fn(&(usize, char)) -> bool>,
+            fn(&(bool, Vec<(usize, char)>)) -> bool>,
         iter::Map<ops::Range<usize>, Ngrams>,
-        fn((bool, Vec<(usize, char)>)) -> iter::Map<ops::Range<usize>, Ngrams>> 
+        fn((bool, Vec<(usize, char)>)) -> iter::Map<ops::Range<usize>, Ngrams>>
 {
     doc.char_indices()
         .group_by(is_whitespace as fn(&(usize, char)) -> bool)
@@ -212,7 +220,7 @@ fn is_whitespace(&(_, c): &(usize, char)) -> bool {
 }
 
 struct Ngrams {
-    chars: Vec<(usize, char)>
+    chars: Vec<(usize, char)>,
 }
 
 impl Ngrams {
@@ -251,35 +259,36 @@ mod test {
 
     #[test]
     fn test_ngrams() {
-        let mut index = InvertedIndex::new();    
+        let mut index = InvertedIndex::new();
         let doc1 = Document::new("1", "learn to program in rust today");
         let doc2 = Document::new("2", "what did you today do");
         index.index(doc1.clone());
         index.index(doc2.clone());
         let search_results = index.search("to");
-        let expected: BTreeMap<_, _> = [
-            (doc1.clone(), vec![(6, 8), (25, 27)]),
-            (doc2, vec![(13, 15)]),
-        ].iter().cloned().collect();
+        let expected: BTreeMap<_, _> = [(doc1.clone(), vec![(6, 8), (25, 27)]),
+                                        (doc2, vec![(13, 15)])]
+                                           .iter()
+                                           .cloned()
+                                           .collect();
         assert_eq!(search_results.len(), expected.len());
         for search_result in &search_results {
             assert_eq!(&search_result.highlights, &expected[search_result.doc])
         }
-        assert_eq!("learn <span class=highlight>to</span> program in rust \
-                   <span class=highlight>to</span>day", 
+        assert_eq!("learn <span class=highlight>to</span> program in rust <span \
+                    class=highlight>to</span>day",
                    search_results.iter()
-                        .find(|search_result| search_result.doc == &doc1)
-                        .unwrap()
-                        .highlight("<span class=highlight>", "</span>"));
+                                 .find(|search_result| search_result.doc == &doc1)
+                                 .unwrap()
+                                 .highlight("<span class=highlight>", "</span>"));
 
     }
 
     #[test]
     fn test_highlight() {
-        let mut index = InvertedIndex::new();    
+        let mut index = InvertedIndex::new();
         let doc1 = Document::new("2", "Won\u{2019}t this split the ecosystem? Will everyone use?");
         index.index(doc1.clone());
-        let expected =  "Won\u{2019}t this split the *e*cosystem? Will *e*veryone use?";
+        let expected = "Won\u{2019}t this split the *e*cosystem? Will *e*veryone use?";
         let search_results = index.search("e");
         assert_eq!(1, search_results.len());
         assert_eq!(search_results[0].highlight("*", "*"), expected);
@@ -287,7 +296,7 @@ mod test {
 
     #[test]
     fn test_unicode() {
-        let mut index = InvertedIndex::new();    
+        let mut index = InvertedIndex::new();
         let doc = Document::new("0", "嗨, 您好");
         index.index(doc.clone());
         let to_search = "您";
@@ -299,7 +308,7 @@ mod test {
 
     #[test]
     fn test_update_doc() {
-        let mut index = InvertedIndex::new();    
+        let mut index = InvertedIndex::new();
         let doc = Document::new("0", "abc åäö");
         index.index(doc);
         let doc = Document::new("0", "different");
@@ -311,7 +320,7 @@ mod test {
 
     #[test]
     fn test_ranking() {
-        let mut index = InvertedIndex::new();    
+        let mut index = InvertedIndex::new();
         let doc = Document::new("0", "beat");
         index.index(doc.clone());
         let doc2 = Document::new("1", "beast");
@@ -324,7 +333,7 @@ mod test {
 
     #[test]
     fn test_duplicate_term() {
-        let mut index = InvertedIndex::new();    
+        let mut index = InvertedIndex::new();
         let doc = Document::new("0", "beat");
         index.index(doc.clone());
         let search_results = index.search("be be");
@@ -333,7 +342,7 @@ mod test {
 
     #[test]
     fn test_duplicate_term2() {
-        let mut index = InvertedIndex::new();    
+        let mut index = InvertedIndex::new();
         let doc = Document::new("0", "beat");
         index.index(doc.clone());
         let search_results = index.search("be b");
@@ -343,7 +352,7 @@ mod test {
 
     #[test]
     fn test_lowercase_search() {
-        let mut index = InvertedIndex::new();    
+        let mut index = InvertedIndex::new();
         let doc = Document::new("0", "BeAt");
         index.index(doc.clone());
         let search_results = index.search("bE");
@@ -353,7 +362,7 @@ mod test {
 
     #[test]
     fn test_lowercase_index() {
-        let mut index = InvertedIndex::new();    
+        let mut index = InvertedIndex::new();
         let doc = Document::new("0", "BeAt");
         index.index(doc.clone());
         let search_results = index.search("be");
