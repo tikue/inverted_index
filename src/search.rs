@@ -177,7 +177,7 @@ impl InvertedIndex {
         let map: HashMap<String, Vec<(usize, usize)>> = unique_terms.into_iter()
             .flat_map(|word| self.index.get(&word))
             .flat_map(BTreeMap::iter)
-            .fold(HashMap::new(), |mut map: HashMap<String, Vec<(usize, usize)>>, (doc_id, highlights): (&String, &Vec<(usize, usize)>)| {
+            .fold(HashMap::new(), |mut map, (doc_id, highlights)| {
                 match map.entry(doc_id.clone()) {
                     Vacant(entry) => { entry.insert(highlights.clone()); },
                     Occupied(mut entry) => {
