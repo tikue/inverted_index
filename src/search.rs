@@ -1,7 +1,6 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::collections::hash_map::Entry::*;
 use std::hash::{Hash, Hasher};
-use std::sync::Arc;
 use std::iter;
 use std::str::CharIndices;
 use std::ops;
@@ -10,7 +9,7 @@ use coalesce::Coalesce;
  
 /// A Document contains an id and content.
 /// Hashing and equality are based only on the id field.
-#[derive(Clone, Eq, Debug, RustcEncodable, RustcDecodable)]
+#[derive(Clone, Debug, Eq, Ord, RustcEncodable, RustcDecodable)]
 pub struct Document {
     id: String,
     content: String,
@@ -42,10 +41,16 @@ impl Hash for Document {
     }
 }
  
-impl PartialEq<Document> for Document {
+impl PartialEq for Document {
     // Documents are unique only upon their id
     fn eq(&self, other: &Document) -> bool {
         self.id == other.id
+    }
+}
+
+impl PartialOrd for Document {
+    fn partial_cmp(&self, other: &Document) -> Option<::std::cmp::Ordering> {
+        self.id.partial_cmp(&other.id)
     }
 }
 
@@ -53,31 +58,14 @@ impl PartialEq<Document> for Document {
 /// terms. It is unique upon the document and the vec of highlight indices. It also contains a
 /// score and a String of the document's content post-highlighting.
 #[derive(Clone, Debug, RustcEncodable)]
-pub struct SearchResult {
-    doc: Arc<Document>,
+pub struct SearchResult<'a> {
+    doc: &'a Document,
     highlights: Vec<(usize, usize)>,
     score: f32,
 }
 
-impl PartialEq for SearchResult {
-    // SearchResult is unique upon its document and highlights
-    fn eq(&self, other: &SearchResult) -> bool {
-        self.doc == other.doc && self.highlights == other.highlights
-    }
-}
-
-impl Eq for SearchResult {}
-
-impl Hash for SearchResult {
-    // SearchResult is unique upon its document and highlights
-    fn hash<H>(&self, state: &mut H) where H: Hasher {
-        self.doc.hash(state);
-        self.highlights.hash(state);
-    }
-}
-
-impl SearchResult {
-    fn new(doc: Arc<Document>, mut highlights: Vec<(usize, usize)>) -> SearchResult {
+impl<'a> SearchResult<'a> {
+    fn new(doc: &'a Document, mut highlights: Vec<(usize, usize)>) -> SearchResult<'a> {
         SearchResult {
             score: highlights.iter()
                 .map(|&(begin, end)| end - begin)
@@ -88,7 +76,7 @@ impl SearchResult {
     }
 
     /// Returns the document
-    pub fn doc(&self) -> &Arc<Document> {
+    pub fn doc(&self) -> &Document {
         &self.doc
     }
 
@@ -129,7 +117,7 @@ impl SearchResult {
 #[derive(Debug)]
 pub struct InvertedIndex {
     index: BTreeMap<String, BTreeMap<String, Vec<(usize, usize)>>>,
-    docs: BTreeMap<String, Arc<Document>>,
+    docs: BTreeMap<String, Document>,
 }
  
 impl InvertedIndex {
@@ -143,7 +131,6 @@ impl InvertedIndex {
     /// A basic implementation of index, splits the document's content into whitespace-separated
     /// words, and inserts each word-document pair into the map.
     pub fn index(&mut self, doc: Document) {
-        let doc = Arc::new(doc);
         let analyzed  = analyze_doc(doc.content());
         let previous_version = self.docs.insert(doc.id.clone(), doc.clone());
         if let Some(previous_version) = previous_version {
@@ -191,7 +178,7 @@ impl InvertedIndex {
                 map
             });
         let mut results: Vec<_> = map.into_iter()
-            .map(|(doc_id, index_map)| SearchResult::new(self.docs[&doc_id].clone(), index_map.into_iter().collect()))
+            .map(|(doc_id, index_map)| SearchResult::new(&self.docs[&doc_id], index_map.into_iter().collect()))
             .collect();
         results.sort_by(|result1, result2| result2.score.partial_cmp(&result1.score).unwrap());
         results
@@ -258,28 +245,9 @@ impl FnOnce<(usize,)> for Ngrams {
 }
 
 #[cfg(test)]
-mod bench {
+mod test {
     use super::*;
-    use std::sync::Arc;
-    use std::collections::HashSet;
-
-    #[test]
-    fn test_search1() {
-        let mut index = InvertedIndex::new();    
-        let doc1 = Document::new("1", "learn to program in rust today");
-        index.index(doc1.clone());
-        let doc2 = Document::new("2", "what did you today do");
-        index.index(doc2.clone());
-        let search_results = index.search("to");
-        let expected = [
-            SearchResult::new(Arc::new(doc1), vec![(6, 8), (25, 27)]),
-            SearchResult::new(Arc::new(doc2), vec![(13, 15)])
-        ];
-        assert_eq!(search_results, expected.iter().cloned().collect::<Vec<_>>());
-        assert_eq!("learn <span class=highlight>to</span> program in rust \
-                   <span class=highlight>to</span>day", 
-                   expected[0].highlight("<span class=highlight>", "</span>"));
-    }
+    use std::collections::BTreeMap;
 
     #[test]
     fn test_ngrams() {
@@ -289,37 +257,25 @@ mod bench {
         index.index(doc1.clone());
         index.index(doc2.clone());
         let search_results = index.search("to");
-        let expected = [
-            SearchResult::new(Arc::new(doc1), vec![(6, 8), (25, 27)]),
-            SearchResult::new(Arc::new(doc2), vec![(13, 15)]),
-        ];
-        assert_eq!(search_results, expected.iter().cloned().collect::<Vec<_>>());
+        let expected: BTreeMap<_, _> = [
+            (doc1.clone(), vec![(6, 8), (25, 27)]),
+            (doc2, vec![(13, 15)]),
+        ].iter().cloned().collect();
+        assert_eq!(search_results.len(), expected.len());
+        for search_result in &search_results {
+            assert_eq!(&search_result.highlights, &expected[search_result.doc])
+        }
         assert_eq!("learn <span class=highlight>to</span> program in rust \
                    <span class=highlight>to</span>day", 
-                   expected[0].highlight("<span class=highlight>", "</span>"));
+                   search_results.iter()
+                        .find(|search_result| search_result.doc == &doc1)
+                        .unwrap()
+                        .highlight("<span class=highlight>", "</span>"));
 
     }
 
     #[test]
-    fn test_highlight1() {
-        let mut index = InvertedIndex::new();    
-        let doc1 = Document::new("2", "what to do today");
-        let doc2 = Document::new("3", "hey today");
-        index.index(doc1.clone());
-        index.index(doc2.clone());
-        let search_results = index.search("to");
-        let expected = [
-            SearchResult::new(Arc::new(doc1), vec![(5, 7), (11, 13)]),
-            SearchResult::new(Arc::new(doc2), vec![(4, 6)]),
-        ];
-        assert_eq!(search_results.into_iter().collect::<HashSet<_>>(), 
-                   expected.iter().cloned().collect());
-        assert_eq!("what <span class=highlight>to</span> do <span class=highlight>to</span>day",
-                   expected[0].highlight("<span class=highlight>", "</span>"));
-    }
-
-    #[test]
-    fn test_highlight2() {
+    fn test_highlight() {
         let mut index = InvertedIndex::new();    
         let doc1 = Document::new("2", "Won\u{2019}t this split the ecosystem? Will everyone use?");
         index.index(doc1.clone());
@@ -359,11 +315,11 @@ mod bench {
         let doc = Document::new("0", "beat");
         index.index(doc.clone());
         let doc2 = Document::new("1", "beast");
-        index.index(doc2.clone());
+        index.index(doc2);
         let search_results = index.search("be");
         assert_eq!(index.docs.len(), 2);
-        assert_eq!(search_results.into_iter().map(|r| r.doc).collect::<HashSet<_>>(),
-                [Arc::new(doc), Arc::new(doc2)].iter().cloned().collect());
+        // "beat" should be first, since it's a closer match
+        assert_eq!(search_results[0].doc, &doc);
     }
 
     #[test]
@@ -382,7 +338,7 @@ mod bench {
         index.index(doc.clone());
         let search_results = index.search("be b");
         assert_eq!(search_results.len(), 1);
-        assert_eq!(search_results[0], SearchResult::new(Arc::new(doc), vec![(0, 2)]));
+        assert_eq!(search_results[0].highlights, vec![(0, 2)]);
     }
 
     #[test]
@@ -392,7 +348,7 @@ mod bench {
         index.index(doc.clone());
         let search_results = index.search("bE");
         assert_eq!(search_results.len(), 1);
-        assert_eq!(search_results[0], SearchResult::new(Arc::new(doc), vec![(0, 2)]));
+        assert_eq!(search_results[0].highlights, vec![(0, 2)]);
     }
 
     #[test]
@@ -402,6 +358,6 @@ mod bench {
         index.index(doc.clone());
         let search_results = index.search("be");
         assert_eq!(search_results.len(), 1);
-        assert_eq!(search_results[0], SearchResult::new(Arc::new(doc), vec![(0, 2)]));
+        assert_eq!(search_results[0].highlights, vec![(0, 2)]);
     }
 }
