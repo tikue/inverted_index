@@ -73,8 +73,7 @@ impl<'a> SearchResult<'a> {
         SearchResult {
             score: highlights.iter()
                 .map(|&(begin, end)| end - begin)
-                .sum::<usize>() as f32 /
-                   (doc.content.len() as f32).sqrt(),
+                .sum::<usize>() as f32 / (doc.content.len() as f32).sqrt(),
             doc: doc,
             highlights: {
                 highlights.sort();
@@ -130,7 +129,7 @@ pub struct InvertedIndex {
     docs: BTreeMap<String, Document>,
 }
 
-/// A Postings map (doc id => highlights) for a single term. 
+/// A Postings map (doc id => highlights) for a single term.
 /// Records which Documents contain the term, and at which locations in the documents.
 pub type PostingsMap = BTreeMap<String, Vec<(usize, usize)>>;
 
@@ -168,7 +167,7 @@ impl InvertedIndex {
             highlights.coalesce(coalesce_idx, highlighted);
         }
     }
-    
+
     fn postings(&self, query: &str) -> PostingsMap {
         let unique_terms: HashSet<_> = query.split_whitespace().map(str::to_lowercase).collect();
         unique_terms.into_iter().flat_map(|word| self.index.get(&word)).merge_postings()
@@ -182,23 +181,23 @@ impl InvertedIndex {
     fn query_rec(&self, query: &Query) -> PostingsMap {
         match *query {
             Match(query) => self.postings(query),
-            And(q1, q2) => Self::and(&self.query_rec(q1), &self.query_rec(q2))
+            And(q1, q2) => Self::and(&self.query_rec(q1), &self.query_rec(q2)),
         }
     }
 
     fn and(postings1: &PostingsMap, postings2: &PostingsMap) -> PostingsMap {
         let postings = &[postings1, postings2];
         postings.intersection()
-            .map(|doc_id| {
-                let mut highlights = postings1[doc_id].clone();
-                for highlight in &postings2[doc_id] {
-                    if let Err(idx) = highlights.binary_search(highlight) {
-                        highlights.coalesce(idx, *highlight);
+                .map(|doc_id| {
+                    let mut highlights = postings1[doc_id].clone();
+                    for highlight in &postings2[doc_id] {
+                        if let Err(idx) = highlights.binary_search(highlight) {
+                            highlights.coalesce(idx, *highlight);
+                        }
                     }
-                }
-                (doc_id.clone(), highlights)
-            })
-            .collect()
+                    (doc_id.clone(), highlights)
+                })
+                .collect()
     }
 
     /// A basic search implementation that splits the query's content into whitespace-separated
@@ -210,11 +209,11 @@ impl InvertedIndex {
 
     fn compute_results(&self, postings: PostingsMap) -> Vec<SearchResult> {
         let mut results: Vec<_> = postings.into_iter()
-                                      .map(|(doc_id, index_map)| {
-                                          SearchResult::new(&self.docs[&doc_id],
-                                                             index_map.into_iter().collect())
-                                       })
-                                       .collect();
+                                          .map(|(doc_id, index_map)| {
+                                              SearchResult::new(&self.docs[&doc_id],
+                                                                index_map.into_iter().collect())
+                                          })
+                                          .collect();
         results.sort_by(|result1, result2| result2.score.partial_cmp(&result1.score).unwrap());
         results
     }
@@ -229,7 +228,9 @@ impl<'a, Iter: Iterator<Item=&'a PostingsMap>> PostingsMerge for Iter {
         let mut map = BTreeMap::new();
         for (doc_id, highlights) in self.flat_map(BTreeMap::iter) {
             match map.entry(doc_id.clone()) {
-                Vacant(entry) => { entry.insert(highlights.clone()); },
+                Vacant(entry) => {
+                    entry.insert(highlights.clone());
+                }
                 Occupied(mut entry) => {
                     let entry = entry.get_mut();
                     for highlight in highlights {
