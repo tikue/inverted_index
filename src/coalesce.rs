@@ -42,10 +42,13 @@ impl<T: Ord + Copy + Merge> Coalesce<T> for Vec<T> {
 macro_rules! impl_merge_tuples {
     ($tp:ident) => (
         impl Merge for ($tp, $tp) {
-            fn merge(self, (after, y): ($tp, $tp))  -> Option<($tp, $tp)> 
-            {
-                let (x, before) = self;
-                if before >= after { Some((x, y)) } else { None }
+            fn merge(self, (x2, y2): ($tp, $tp))  -> Option<($tp, $tp)> {
+                let (x1, y1) = self;
+                if y1 >= x2 {
+                    if y1 < y2 { Some((x1, y2)) } else { Some((x1, y1)) }
+                } else {
+                    None
+                }
             }
         }
     )
@@ -112,5 +115,11 @@ fn test_search_and_coalesce() {
         v.coalesce(index, el);
     }
     assert_eq!(v, [(-2, 1)]);
+}
 
+#[test]
+fn test_coalesce_subrange() {
+    let mut v = vec![(0, 3)];
+    v.coalesce(1, (1, 2));
+    assert_eq!(v, [(0, 3)]);
 }
