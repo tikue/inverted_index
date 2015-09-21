@@ -1,11 +1,12 @@
-use std::collections::{BTreeMap, HashMap, HashSet};
-use std::collections::hash_map::Entry::*;
+use std::collections::{BTreeMap, HashSet};
+use std::collections::btree_map::Entry::*;
 use std::hash::{Hash, Hasher};
 use std::iter;
 use std::str::CharIndices;
 use std::ops;
 use itertools::{GroupBy, Itertools};
 use coalesce::Coalesce;
+use btree_map_ext::BTreeMapExt;
 
 /// A Document contains an id and content.
 /// Hashing and equality are based only on the id field.
@@ -171,30 +172,46 @@ impl InvertedIndex {
     /// words, looks up the set of Documents for each word, and then concatenates the sets.
     pub fn search(&self, query: &str) -> Vec<SearchResult> {
         let unique_terms: HashSet<_> = query.split_whitespace().map(str::to_lowercase).collect();
-        let map: HashMap<String, Vec<(usize, usize)>> = unique_terms.into_iter()
-            .flat_map(|word| self.index.get(&word))
-            .flat_map(BTreeMap::iter)
-            .fold(HashMap::new(), |mut map, (doc_id, highlights)| {
-                match map.entry(doc_id.clone()) {
-                    Vacant(entry) => { entry.insert(highlights.clone()); },
-                    Occupied(mut entry) => {
-                        let entry: &mut Vec<(usize, usize)> = entry.get_mut();
-                        for highlight in highlights {
-                            let coalesce_idx = entry.binary_search(highlight).err().unwrap();
-                            entry.coalesce(coalesce_idx, highlight.clone());
-                        }
-                    }
-                }
-                map
-            });
-        let mut results: Vec<_> = map.into_iter()
-                                     .map(|(doc_id, index_map)| {
-                                         SearchResult::new(&self.docs[&doc_id],
-                                                           index_map.into_iter().collect())
-                                     })
-                                     .collect();
+        let postings: Vec<_> = unique_terms.into_iter()
+                    .flat_map(|word| self.index.get(&word))
+                    .collect();
+        self.compute_results(&postings)
+    }
+
+    fn compute_results(&self, postings: &[&PostingsMap]) -> Vec<SearchResult>
+    {
+        let mut results: Vec<_> = postings.compute_results()
+                                      .into_iter()
+                                      .map(|(doc_id, index_map)| {
+                                          SearchResult::new(&self.docs[&doc_id],
+                                                             index_map.into_iter().collect())
+                                       })
+                                       .collect();
         results.sort_by(|result1, result2| result2.score.partial_cmp(&result1.score).unwrap());
         results
+    }
+}
+
+trait ComputeResults {
+    fn compute_results(self) -> BTreeMap<String, Vec<(usize, usize)>>;
+}
+
+impl<'a> ComputeResults for &'a [&'a PostingsMap] {
+    fn compute_results(self) -> BTreeMap<String, Vec<(usize, usize)>> {
+        let mut map = BTreeMap::new();
+        for (doc_id, highlights) in self.iter().flat_map(|&map| map) {
+            match map.entry(doc_id.clone()) {
+                Vacant(entry) => { entry.insert(highlights.clone()); },
+                Occupied(mut entry) => {
+                    let entry = entry.get_mut();
+                    for highlight in highlights {
+                        let coalesce_idx = entry.binary_search(highlight).err().unwrap();
+                        entry.coalesce(coalesce_idx, highlight.clone());
+                    }
+                }
+            }
+        }
+        map
     }
 }
 
