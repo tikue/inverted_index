@@ -7,6 +7,7 @@ use std::ops;
 use itertools::{GroupBy, Itertools};
 use coalesce::Coalesce;
 use btree_map_ext::BTreeMapExt;
+use query::Query::{self, And, Match};
 
 /// A Document contains an id and content.
 /// Hashing and equality are based only on the id field.
@@ -168,20 +169,34 @@ impl InvertedIndex {
         }
     }
 
+    pub fn query(&self, query: &Query) -> PostingsMap {
+        match *query {
+            Match(query) => self.postings(query),
+            And(q1, q2) => Self::and(&self.query(q1), &self.query(q2))
+        }
+    }
+
+    fn and(postings1: &PostingsMap, postings2: &PostingsMap) -> PostingsMap {
+        (&[postings1, postings2] as &[&PostingsMap])
+            .intersection()
+            .map(|doc_id| (doc_id.clone(), (&postings1[doc_id]).into_iter().chain((&postings2[doc_id]).into_iter()).cloned().collect()))
+            .collect()
+    }
+
+    fn postings(&self, query: &str) -> PostingsMap {
+        let unique_terms: HashSet<_> = query.split_whitespace().map(str::to_lowercase).collect();
+        unique_terms.into_iter().flat_map(|word| self.index.get(&word)).merge_postings()
+    }
+
     /// A basic search implementation that splits the query's content into whitespace-separated
     /// words, looks up the set of Documents for each word, and then concatenates the sets.
     pub fn search(&self, query: &str) -> Vec<SearchResult> {
-        let unique_terms: HashSet<_> = query.split_whitespace().map(str::to_lowercase).collect();
-        let postings: Vec<_> = unique_terms.into_iter()
-                    .flat_map(|word| self.index.get(&word))
-                    .collect();
-        self.compute_results(&postings)
+        let postings = self.postings(query);
+        self.compute_results(postings)
     }
 
-    fn compute_results(&self, postings: &[&PostingsMap]) -> Vec<SearchResult>
-    {
-        let mut results: Vec<_> = postings.compute_results()
-                                      .into_iter()
+    fn compute_results(&self, postings: PostingsMap) -> Vec<SearchResult> {
+        let mut results: Vec<_> = postings.into_iter()
                                       .map(|(doc_id, index_map)| {
                                           SearchResult::new(&self.docs[&doc_id],
                                                              index_map.into_iter().collect())
@@ -192,14 +207,14 @@ impl InvertedIndex {
     }
 }
 
-trait ComputeResults {
-    fn compute_results(self) -> BTreeMap<String, Vec<(usize, usize)>>;
+trait PostingsMerge {
+    fn merge_postings(self) -> PostingsMap;
 }
 
-impl<'a> ComputeResults for &'a [&'a PostingsMap] {
-    fn compute_results(self) -> BTreeMap<String, Vec<(usize, usize)>> {
+impl<'a, Iter: Iterator<Item=&'a PostingsMap>> PostingsMerge for Iter {
+    fn merge_postings(self) -> PostingsMap {
         let mut map = BTreeMap::new();
-        for (doc_id, highlights) in self.iter().flat_map(|&map| map) {
+        for (doc_id, highlights) in self.flat_map(BTreeMap::iter) {
             match map.entry(doc_id.clone()) {
                 Vacant(entry) => { entry.insert(highlights.clone()); },
                 Occupied(mut entry) => {

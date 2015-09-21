@@ -1,51 +1,53 @@
-use core::iter::Peekable;
-use std::cmp::Ordering::*;
 use std::collections::btree_map::{BTreeMap, Keys};
 
 /// A lazy iterator producing elements in the set intersection (in-order).
-pub struct Intersection<'a, K:'a, V:'a> {
-    iters: Vec<Keys<'a, K, V>>,
+#[derive(Clone)]
+pub struct Intersection<K, Iter: Iterator<Item=K>> {
+    iters: Vec<Iter>
 }
 
-impl<'a, K, V> Clone for Intersection<'a, K, V> {
-    fn clone(&self) -> Intersection<'a, K, V> {
-        Intersection { iters: self.iters.clone() }
-    }
-}
+impl<K: Ord, V: Iterator<Item=K>> Iterator for Intersection<K, V> {
+    type Item = K;
 
-impl<'a, K: Ord, V> Iterator for Intersection<'a, K, V> {
-    type Item = &'a K;
+    fn next(&mut self) -> Option<K> {
+        let mut maximum = match self.iters.first_mut().map(Iterator::next) {
+            Some(Some(k)) => k,
+            _ => return None
+        };
 
-    fn next(&mut self) -> Option<&'a K> {
-        match &mut *self.iters {
-            [] => None,
-            [ref mut iter] => iter.next(),
-            [ref mut first, ref mut rest..] => {
-                /*
-                loop {
-                    let all_equal = true;
-                    for iter in &mut rest {
-                        match  {
-                            None          => return None,
-                            Some(Less)    => { self.a.next(); }
-                            Some(Equal)   => { self.b.next(); return self.a.next() }
-                            Some(Greater) => { self.b.next(); }
-                        }
-                    }
-                    let o_cmp = match (self.a.peek(), self.b.peek()) {
-                        (None    , _       ) => None,
-                        (_       , None    ) => None,
-                        (Some(a1), Some(b1)) => Some(a1.cmp(b1)),
-                    };
+        // Where the maximum came from
+        let mut skip_nth = 0;
+
+        // Keep trying to...
+        loop {
+            let mut retry_with = None;
+
+            // ...match all iters front element
+            // with the chosen maximum
+            for (i, iter) in self.iters.iter_mut().enumerate() {
+                if i == skip_nth { continue; }
+            
+                match iter.find(|x| x >= &maximum) {
+                    Some(val) => if val > maximum {
+                        retry_with = Some(val);
+                        skip_nth = i;
+                        break;
+                    },
+
+                    // Intersection is empty
+                    None => return None,
                 }
-                */
-                None
+            }
+
+            match retry_with {
+                Some(new_maximum) => maximum = new_maximum,
+                None => return Some(maximum)
             }
         }
     }
 }
 
-pub trait BTreeMapExt<'a> {
+pub trait BTreeMapExt {
     /// Visits the values representing the intersection, in ascending order.
     ///
     /// # Examples
@@ -65,14 +67,58 @@ pub trait BTreeMapExt<'a> {
     /// assert_eq!(intersection, [2]);
     /// ```
     type Key;
-    type Value;
-    fn intersection(&'a self) -> Intersection<'a, Self::Key, Self::Value>;
+    type Iter: Iterator<Item=Self::Key>;
+    fn intersection(self) -> Intersection<Self::Key, Self::Iter>;
 }
 
-impl<'a, K: Ord, V> BTreeMapExt<'a> for &'a [&'a BTreeMap<K, V>] {
-    type Key = K;
-    type Value = V;
-    fn intersection(&'a self) -> Intersection<'a, K, V> {
+impl<'a, K: Ord, V> BTreeMapExt for &'a [&'a BTreeMap<K, V>] {
+    type Key = &'a K;
+    type Iter = Keys<'a, K, V>;
+    fn intersection(self) -> Intersection<&'a K, Keys<'a, K, V>> {
         Intersection{iters: self.iter().map(|map| map.keys()).collect() }
     }
+}
+
+#[test]
+fn test_intersection_first_min() {
+    let mut map1 = BTreeMap::new();
+    map1.insert(1, ());
+    map1.insert(2, ());
+    map1.insert(3, ());
+    map1.insert(4, ());
+    let mut map2 = BTreeMap::new();
+    map2.insert(2, ());
+    map2.insert(3, ());
+    map2.insert(4, ());
+    let mut map3 = BTreeMap::new();
+    map3.insert(1, ());
+    map3.insert(2, ());
+    map3.insert(3, ());
+    let maps = vec![map1, map2, map3];
+    let maps: Vec<_> = maps.iter().collect();
+    let maps = &*maps;
+    let intersection: Vec<_> = maps.intersection().collect();
+    assert_eq!(intersection, vec![&2, &3]);
+}
+
+#[test]
+fn test_intersection_last_min() {
+    let mut map1 = BTreeMap::new();
+    map1.insert(2, ());
+    map1.insert(3, ());
+    map1.insert(4, ());
+    map1.insert(5, ());
+    let mut map2 = BTreeMap::new();
+    map2.insert(2, ());
+    map2.insert(3, ());
+    map2.insert(4, ());
+    let mut map3 = BTreeMap::new();
+    map3.insert(1, ());
+    map3.insert(2, ());
+    map3.insert(3, ());
+    let maps = vec![map1, map2, map3];
+    let maps: Vec<_> = maps.iter().collect();
+    let maps = &*maps;
+    let intersection: Vec<_> = maps.intersection().collect();
+    assert_eq!(intersection, vec![&2, &3]);
 }
