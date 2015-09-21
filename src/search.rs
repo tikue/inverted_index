@@ -168,24 +168,37 @@ impl InvertedIndex {
             highlights.coalesce(coalesce_idx, highlighted);
         }
     }
+    
+    fn postings(&self, query: &str) -> PostingsMap {
+        let unique_terms: HashSet<_> = query.split_whitespace().map(str::to_lowercase).collect();
+        unique_terms.into_iter().flat_map(|word| self.index.get(&word)).merge_postings()
+    }
 
-    pub fn query(&self, query: &Query) -> PostingsMap {
+    pub fn query(&self, query: &Query) -> Vec<SearchResult> {
+        let postings = self.query_rec(query);
+        self.compute_results(postings)
+    }
+
+    fn query_rec(&self, query: &Query) -> PostingsMap {
         match *query {
             Match(query) => self.postings(query),
-            And(q1, q2) => Self::and(&self.query(q1), &self.query(q2))
+            And(q1, q2) => Self::and(&self.query_rec(q1), &self.query_rec(q2))
         }
     }
 
     fn and(postings1: &PostingsMap, postings2: &PostingsMap) -> PostingsMap {
         (&[postings1, postings2] as &[&PostingsMap])
             .intersection()
-            .map(|doc_id| (doc_id.clone(), (&postings1[doc_id]).into_iter().chain((&postings2[doc_id]).into_iter()).cloned().collect()))
+            .map(|doc_id| {
+                let mut highlights = postings1[doc_id].clone();
+                for highlight in &postings2[doc_id] {
+                    if let Err(idx) = highlights.binary_search(highlight) {
+                        highlights.coalesce(idx, *highlight);
+                    }
+                }
+                (doc_id.clone(), highlights)
+            })
             .collect()
-    }
-
-    fn postings(&self, query: &str) -> PostingsMap {
-        let unique_terms: HashSet<_> = query.split_whitespace().map(str::to_lowercase).collect();
-        unique_terms.into_iter().flat_map(|word| self.index.get(&word)).merge_postings()
     }
 
     /// A basic search implementation that splits the query's content into whitespace-separated
@@ -294,6 +307,7 @@ impl FnOnce<(usize,)> for Ngrams {
 #[cfg(test)]
 mod test {
     use super::*;
+    use query::Query::{And, Match};
     use std::collections::BTreeMap;
 
     #[test]
@@ -407,5 +421,25 @@ mod test {
         let search_results = index.search("be");
         assert_eq!(search_results.len(), 1);
         assert_eq!(search_results[0].highlights, vec![(0, 2)]);
+    }
+
+    #[test]
+    fn test_and() {
+        let mut index = InvertedIndex::new();
+        let doc1 = Document::new("1", "learn to program in rust today");
+        let doc2 = Document::new("2", "what did you today do");
+        let doc3 = Document::new("3", "what did you do yesterday");
+        index.index(doc1.clone());
+        index.index(doc2.clone());
+        index.index(doc3.clone());
+        let search_results = index.query(&And(&Match("today"), &Match("you")));
+        let expected: BTreeMap<_, _> = [(doc2, vec![(9, 12), (13, 18)])]
+                                           .iter()
+                                           .cloned()
+                                           .collect();
+        assert_eq!(search_results.len(), expected.len());
+        for search_result in &search_results {
+            assert_eq!(&search_result.highlights, &expected[search_result.doc])
+        }
     }
 }
