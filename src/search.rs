@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use std::collections::{BTreeMap, HashSet};
 use std::collections::btree_map::Entry::*;
 use std::hash::{Hash, Hasher};
@@ -7,7 +8,7 @@ use std::ops;
 use itertools::{GroupBy, Itertools};
 use coalesce::Coalesce;
 use btree_map_ext::BTreeMapExt;
-use query::Query::{self, And, Match};
+use query::Query::{self, And, Match, Or};
 
 /// A Document contains an id and content.
 /// Hashing and equality are based only on the id field.
@@ -181,23 +182,12 @@ impl InvertedIndex {
     fn query_rec(&self, query: &Query) -> PostingsMap {
         match *query {
             Match(query) => self.postings(query),
-            And(q1, q2) => Self::and(&self.query_rec(q1), &self.query_rec(q2)),
+            And(queries) => {
+                let postings: Vec<_> = queries.iter().map(|q| self.query_rec(q)).collect();
+                postings.intersect_postings()
+            }
+            Or(queries) => queries.into_iter().map(|q| self.query_rec(q)).merge_postings(),
         }
-    }
-
-    fn and(postings1: &PostingsMap, postings2: &PostingsMap) -> PostingsMap {
-        let postings = &[postings1, postings2];
-        postings.intersection()
-                .map(|doc_id| {
-                    let mut highlights = postings1[doc_id].clone();
-                    for highlight in &postings2[doc_id] {
-                        if let Err(idx) = highlights.binary_search(highlight) {
-                            highlights.coalesce(idx, *highlight);
-                        }
-                    }
-                    (doc_id.clone(), highlights)
-                })
-                .collect()
     }
 
     /// A basic search implementation that splits the query's content into whitespace-separated
@@ -223,24 +213,59 @@ trait PostingsMerge {
     fn merge_postings(self) -> PostingsMap;
 }
 
-impl<'a, Iter: Iterator<Item=&'a PostingsMap>> PostingsMerge for Iter {
+impl<'a, Iter> PostingsMerge for Iter 
+    where Iter: Iterator,
+          Iter::Item: Borrow<PostingsMap> {
     fn merge_postings(self) -> PostingsMap {
-        let mut map = BTreeMap::new();
-        for (doc_id, highlights) in self.flat_map(BTreeMap::iter) {
-            match map.entry(doc_id.clone()) {
-                Vacant(entry) => {
-                    entry.insert(highlights.clone());
-                }
-                Occupied(mut entry) => {
-                    let entry = entry.get_mut();
-                    for highlight in highlights {
-                        let coalesce_idx = entry.binary_search(highlight).err().unwrap();
-                        entry.coalesce(coalesce_idx, highlight.clone());
+        let mut map = PostingsMap::new();
+        for tree in self {
+            let tree = tree.borrow();
+            for (doc_id, highlights) in tree.iter() {
+                match map.entry(doc_id.clone()) {
+                    Vacant(entry) => {
+                        entry.insert(highlights.clone());
+                    }
+                    Occupied(mut entry) => {
+                        let entry = entry.get_mut();
+                        for highlight in highlights {
+                            if let Err(idx) = entry.binary_search(highlight) {
+                                entry.coalesce(idx, highlight.clone());
+                            }
+                        }
                     }
                 }
             }
         }
         map
+    }
+}
+
+
+trait PostingsIntersect {
+    fn intersect_postings(self) -> PostingsMap;
+}
+
+impl<'a> PostingsIntersect for &'a [PostingsMap] {
+    fn intersect_postings(self) -> PostingsMap {
+        match self {
+            [] => PostingsMap::new(),
+            [ref posting] => posting.clone(),
+            [ref posting0, rest..] => {
+                self.intersection()
+                    .map(|doc_id| {
+                        let mut highlights = posting0[doc_id].clone();
+                        for posting in rest {
+                            for highlight in &posting[doc_id] {
+                                if let Err(idx) = highlights.binary_search(highlight) {
+                                    highlights.coalesce(idx, *highlight);
+                                }
+                            }
+                        }
+                        (doc_id.clone(), highlights)
+                    })
+                    .collect()
+            }
+        }
     }
 }
 
@@ -308,7 +333,7 @@ impl FnOnce<(usize,)> for Ngrams {
 #[cfg(test)]
 mod test {
     use super::*;
-    use query::Query::{And, Match};
+    use query::Query::{And, Match, Or};
     use std::collections::BTreeMap;
 
     #[test]
@@ -433,8 +458,28 @@ mod test {
         index.index(doc1.clone());
         index.index(doc2.clone());
         index.index(doc3.clone());
-        let search_results = index.query(&And(&Match("today"), &Match("you")));
+        let search_results = index.query(&And(&[Match("today"), Match("you")]));
         let expected: BTreeMap<_, _> = [(doc2, vec![(9, 12), (13, 18)])]
+                                           .iter()
+                                           .cloned()
+                                           .collect();
+        assert_eq!(search_results.len(), expected.len());
+        for search_result in &search_results {
+            assert_eq!(&search_result.highlights, &expected[search_result.doc])
+        }
+    }
+
+    #[test]
+    fn test_and_or() {
+        let mut index = InvertedIndex::new();
+        let doc1 = Document::new("1", "learn to program in rust today");
+        let doc2 = Document::new("2", "what did you today do");
+        let doc3 = Document::new("3", "what did you do yesterday");
+        index.index(doc1.clone());
+        index.index(doc2.clone());
+        index.index(doc3.clone());
+        let search_results = index.query(&Or(&[Match("you"), And(&[Match("today"), Match("you")])]));
+        let expected: BTreeMap<_, _> = [(doc2, vec![(9, 12), (13, 18)]), (doc3, vec![(9, 12)])]
                                            .iter()
                                            .cloned()
                                            .collect();

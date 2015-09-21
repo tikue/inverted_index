@@ -71,7 +71,7 @@ pub trait BTreeMapExt {
     fn intersection(self) -> Intersection<Self::Key, Self::Iter>;
 }
 
-impl<'a, K: Ord, V> BTreeMapExt for &'a [&'a BTreeMap<K, V>] {
+impl<'a, K: Ord, V> BTreeMapExt for &'a [BTreeMap<K, V>] {
     type Key = &'a K;
     type Iter = Keys<'a, K, V>;
     fn intersection(self) -> Intersection<&'a K, Keys<'a, K, V>> {
@@ -95,7 +95,6 @@ fn test_intersection_first_min() {
     map3.insert(2, ());
     map3.insert(3, ());
     let maps = vec![map1, map2, map3];
-    let maps: Vec<_> = maps.iter().collect();
     let maps = &*maps;
     let intersection: Vec<_> = maps.intersection().collect();
     assert_eq!(intersection, vec![&2, &3]);
@@ -117,7 +116,6 @@ fn test_intersection_last_min() {
     map3.insert(2, ());
     map3.insert(3, ());
     let maps = vec![map1, map2, map3];
-    let maps: Vec<_> = maps.iter().collect();
     let maps = &*maps;
     let intersection: Vec<_> = maps.intersection().collect();
     assert_eq!(intersection, vec![&2, &3]);
