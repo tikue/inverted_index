@@ -187,8 +187,8 @@ impl InvertedIndex {
     }
 
     fn and(postings1: &PostingsMap, postings2: &PostingsMap) -> PostingsMap {
-        (&[postings1, postings2] as &[&PostingsMap])
-            .intersection()
+        let postings = &[postings1, postings2];
+        postings.intersection()
             .map(|doc_id| {
                 let mut highlights = postings1[doc_id].clone();
                 for highlight in &postings2[doc_id] {
