@@ -30,10 +30,9 @@ impl<'a, Iter> PostingsMerge for Iter
                     }
                     Occupied(mut entry) => {
                         let entry = entry.get_mut();
-                        for highlight in highlights {
-                            if let Err(idx) = entry.binary_search(highlight) {
-                                entry.coalesce(idx, highlight.clone());
-                            }
+                        let mut last_search = 0;
+                        for &highlight in highlights {
+                            last_search = entry.search_coalesce(last_search, highlight);
                         }
                     }
                 }
@@ -62,10 +61,9 @@ impl<'a> PostingsIntersect for &'a [PostingsMap] {
                     .map(|doc_id| {
                         let mut highlights = posting0[doc_id].clone();
                         for posting in rest {
-                            for highlight in &posting[doc_id] {
-                                if let Err(idx) = highlights.binary_search(highlight) {
-                                    highlights.coalesce(idx, *highlight);
-                                }
+                            let mut last_search = 0;
+                            for &highlight in &posting[doc_id] {
+                                last_search = highlights.search_coalesce(last_search, highlight);
                             }
                         }
                         (doc_id.clone(), highlights)

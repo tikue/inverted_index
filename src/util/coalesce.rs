@@ -10,6 +10,8 @@ pub trait Merge: Ord + Copy {
 pub trait Coalesce<T: Ord + Copy + Merge> {
     /// Inserts or merges, if possible, the item into the collection at the given index.
     fn coalesce(&mut self, index: usize, el: T); 
+    /// Searches for the index to insert the element in order, then coalesces at the found index;
+    fn search_coalesce(&mut self, start: usize, el: T) -> usize;
 }
 
 impl<T: Ord + Copy + Merge> Coalesce<T> for Vec<T> {
@@ -40,6 +42,16 @@ impl<T: Ord + Copy + Merge> Coalesce<T> for Vec<T> {
                 self[index ] = coalesced;
             } else {
                 self.insert(index, el);
+            }
+        }
+    }
+
+    fn search_coalesce(&mut self, start: usize, el: T) -> usize {
+        match self[start..].binary_search(&el) {
+            Ok(idx) => idx,
+            Err(idx) => {
+                self.coalesce(idx, el);
+                idx
             }
         }
     }
