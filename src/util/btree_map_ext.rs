@@ -62,6 +62,7 @@ pub trait BTreeMapExt {
     ///
     /// ```
     /// use std::collections::BTreeMap;
+    /// use inverted_index::util::BTreeMapExt;
     ///
     /// let mut a = BTreeMap::new();
     /// a.insert(1, ());
