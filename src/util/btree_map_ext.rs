@@ -47,27 +47,34 @@ impl<K: Ord, V: Iterator<Item=K>> Iterator for Intersection<K, V> {
     }
 }
 
+/// An extension trait for slices of BTreeMaps that enables
+/// computing intersections
 pub trait BTreeMapExt {
+    /// The type of the map's keys.
+    type Key;
+
+    /// The type of the map's keys iterator.
+    type Iter: Iterator<Item=Self::Key>;
+
     /// Visits the values representing the intersection, in ascending order.
     ///
     /// # Examples
     ///
     /// ```
-    /// use std::collections::BTreeSet;
+    /// use std::collections::BTreeMap;
     ///
-    /// let mut a = BTreeSet::new();
-    /// a.insert(1);
-    /// a.insert(2);
+    /// let mut a = BTreeMap::new();
+    /// a.insert(1, ());
+    /// a.insert(2, ());
     ///
-    /// let mut b = BTreeSet::new();
-    /// b.insert(2);
-    /// b.insert(3);
+    /// let mut b = BTreeMap::new();
+    /// b.insert(2, ());
+    /// b.insert(3, ());
     ///
-    /// let intersection: Vec<_> = a.intersection(&b).cloned().collect();
+    /// let maps = &[a, b];
+    /// let intersection: Vec<_> = maps.intersection().cloned().collect();
     /// assert_eq!(intersection, [2]);
     /// ```
-    type Key;
-    type Iter: Iterator<Item=Self::Key>;
     fn intersection(self) -> Intersection<Self::Key, Self::Iter>;
 }
 

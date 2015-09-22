@@ -1,8 +1,14 @@
+/// Enables the ability to merge two items
 pub trait Merge: Ord + Copy {
+    /// Returns the result of merging self with other, if possible, and None otherwise.
     fn merge(self, other: Self) -> Option<Self>;
 }
 
+/// Enables the ability to coalesce items in a collection
+/// Coalescence occurs when two items in the collection are merged
+/// in lieu of inserting a new item
 pub trait Coalesce<T: Ord + Copy + Merge> {
+    /// Inserts or merges, if possible, the item into the collection at the given index.
     fn coalesce(&mut self, index: usize, el: T); 
 }
 

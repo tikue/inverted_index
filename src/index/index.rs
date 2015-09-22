@@ -21,6 +21,7 @@ pub struct InvertedIndex {
 }
 
 impl InvertedIndex {
+    /// Constructs a new, empty InvertedIndex
     pub fn new() -> InvertedIndex {
         InvertedIndex { index: BTreeMap::new(), docs: BTreeMap::new() }
     }
@@ -55,14 +56,20 @@ impl InvertedIndex {
         }
     }
 
-    fn postings(&self, query: &str) -> PostingsMap {
-        let unique_terms: HashSet<_> = query.split_whitespace().map(str::to_lowercase).collect();
-        unique_terms.into_iter().flat_map(|word| self.index.get(&word)).merge_postings()
-    }
-
+    /// Performs a search to the specification of the given query
     pub fn query(&self, query: &Query) -> Vec<SearchResult> {
         let postings = self.query_rec(query);
         self.compute_results(postings)
+    }
+
+    /// A helper method for performing a Match query
+    pub fn search(&self, query: &str) -> Vec<SearchResult> {
+        self.query(&Match(query))
+    }
+
+    fn postings(&self, query: &str) -> PostingsMap {
+        let unique_terms: HashSet<_> = query.split_whitespace().map(str::to_lowercase).collect();
+        unique_terms.into_iter().flat_map(|word| self.index.get(&word)).merge_postings()
     }
 
     fn query_rec(&self, query: &Query) -> PostingsMap {
@@ -74,13 +81,6 @@ impl InvertedIndex {
             }
             Or(queries) => queries.into_iter().map(|q| self.query_rec(q)).merge_postings(),
         }
-    }
-
-    /// A basic search implementation that splits the query's content into whitespace-separated
-    /// words, looks up the set of Documents for each word, and then concatenates the sets.
-    pub fn search(&self, query: &str) -> Vec<SearchResult> {
-        let postings = self.postings(query);
-        self.compute_results(postings)
     }
 
     fn compute_results(&self, postings: PostingsMap) -> Vec<SearchResult> {

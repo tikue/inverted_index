@@ -5,12 +5,17 @@ use super::Document;
 /// search score for use in ranking against the other search results
 #[derive(Clone, Debug, RustcEncodable)]
 pub struct SearchResult<'a> {
+    /// The document returned for the search
     pub doc: &'a Document,
+    /// The indices of the terms in the document that matched the search
     pub highlights: Vec<(usize, usize)>,
+    /// The search score, for use in ranking documents
     pub score: f32,
 }
 
 impl<'a> SearchResult<'a> {
+    /// Constructs a new SearchResult from the given Document and highlights.
+    /// Computes the score using the highlights and the document length
     pub fn new(doc: &'a Document, highlights: Vec<(usize, usize)>) -> SearchResult<'a> {
         SearchResult {
             score: highlights.iter()
@@ -43,6 +48,8 @@ impl<'a> SearchResult<'a> {
         self.score
     }
 
+    /// Returns the search result's content, surrounding all highlighted terms with `before`
+    /// and `after` 
     pub fn highlight(&self, before: &str, after: &str) -> String {
         let mut begin_idx = 0;
         let mut parts = String::new();

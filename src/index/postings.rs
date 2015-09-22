@@ -9,12 +9,15 @@ use util::*;
 pub type PostingsMap = BTreeMap<String, Vec<(usize, usize)>>;
 
 
+/// An extension trait for iterables over PostingsMaps
+/// that enables the computation of the union of Postingsmaps
 pub trait PostingsMerge {
+    /// Computes the map containing the union of the maps in self
     fn merge_postings(self) -> PostingsMap;
 }
 
 impl<'a, Iter> PostingsMerge for Iter 
-    where Iter: Iterator,
+    where Iter: IntoIterator,
           Iter::Item: Borrow<PostingsMap> {
     fn merge_postings(self) -> PostingsMap {
         let mut map = PostingsMap::new();
@@ -41,7 +44,11 @@ impl<'a, Iter> PostingsMerge for Iter
 }
 
 
+/// An extension trait for slices of PostingsMaps,
+/// that enables the computation of the intersection
+/// of PostingsMaps
 pub trait PostingsIntersect {
+    /// Computes the map containing the intersection of the the maps in self
     fn intersect_postings(self) -> PostingsMap;
 }
 

@@ -4,7 +4,9 @@ use std::hash::{Hash, Hasher};
 /// Hashing and equality are based only on the id field.
 #[derive(Clone, Debug, Eq, Ord, RustcEncodable, RustcDecodable)]
 pub struct Document {
+    /// The id of the document
     pub id: String,
+    /// The document's content
     pub content: String,
 }
 
@@ -18,10 +20,12 @@ impl Document {
         Document { id: id.into(), content: content.into() }
     }
 
+    /// Returns a reference to the document's id
     pub fn id(&self) -> &str {
         &self.id
     }
 
+    /// Returns a reference to the document's content
     pub fn content(&self) -> &str {
         &self.content
     }
@@ -48,5 +52,3 @@ impl PartialOrd for Document {
         self.id.partial_cmp(&other.id)
     }
 }
-
-
