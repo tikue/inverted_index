@@ -1,124 +1,14 @@
-use std::borrow::Borrow;
 use std::collections::{BTreeMap, HashSet};
-use std::collections::btree_map::Entry::*;
-use std::hash::{Hash, Hasher};
+use std::hash::Hasher;
 use std::iter;
 use std::str::CharIndices;
 use std::ops;
+
 use itertools::{GroupBy, Itertools};
-use coalesce::Coalesce;
-use btree_map_ext::BTreeMapExt;
-use query::Query::{self, And, Match, Or};
 
-/// A Document contains an id and content.
-/// Hashing and equality are based only on the id field.
-#[derive(Clone, Debug, Eq, Ord, RustcEncodable, RustcDecodable)]
-pub struct Document {
-    id: String,
-    content: String,
-}
-
-impl Document {
-    /// Construct a new Document from an id and content.
-    /// Both two arguments can be anything that can be turned into a String.
-    pub fn new<S, T>(id: S, content: T) -> Document
-        where S: Into<String>,
-              T: Into<String>
-    {
-        Document { id: id.into(), content: content.into() }
-    }
-
-    pub fn id(&self) -> &str {
-        &self.id
-    }
-
-    pub fn content(&self) -> &str {
-        &self.content
-    }
-}
-
-impl Hash for Document {
-    // Documents are unique only upon their id
-    fn hash<H>(&self, state: &mut H)
-        where H: Hasher
-    {
-        self.id.hash(state);
-    }
-}
-
-impl PartialEq for Document {
-    // Documents are unique only upon their id
-    fn eq(&self, other: &Document) -> bool {
-        self.id == other.id
-    }
-}
-
-impl PartialOrd for Document {
-    fn partial_cmp(&self, other: &Document) -> Option<::std::cmp::Ordering> {
-        self.id.partial_cmp(&other.id)
-    }
-}
-
-/// A SearchResult is the representation of a Document returned for a specific set of search
-/// terms. It is unique upon the document and the vec of highlight indices. It also contains a
-/// search score for use in ranking against the other search results
-#[derive(Clone, Debug, RustcEncodable)]
-pub struct SearchResult<'a> {
-    doc: &'a Document,
-    highlights: Vec<(usize, usize)>,
-    score: f32,
-}
-
-impl<'a> SearchResult<'a> {
-    fn new(doc: &'a Document, mut highlights: Vec<(usize, usize)>) -> SearchResult<'a> {
-        SearchResult {
-            score: highlights.iter()
-                .map(|&(begin, end)| end - begin)
-                .sum::<usize>() as f32 / (doc.content.len() as f32).sqrt(),
-            doc: doc,
-            highlights: {
-                highlights.sort();
-                highlights
-            },
-        }
-    }
-
-    /// Returns the document
-    pub fn doc(&self) -> &Document {
-        &self.doc
-    }
-
-    /// Returns the highlighted indices.
-    ///
-    /// Each `(usize, usize)` indicates the start and end of a term in the document's content
-    /// that should be highlighted.
-    pub fn highlights(&self) -> &Vec<(usize, usize)> {
-        &self.highlights
-    }
-
-    /// Returns the search result's score.
-    ///
-    /// Score is computed by the product of the summed length of the matching terms and the inverse
-    /// square root of the length of the document. Taking the square root of the document's length
-    /// helps to combat bias toward short content.
-    pub fn score(&self) -> f32 {
-        self.score
-    }
-
-    pub fn highlight(&self, before: &str, after: &str) -> String {
-        let mut begin_idx = 0;
-        let mut parts = String::new();
-        for &(begin, end) in &self.highlights {
-            parts.push_str(&self.doc.content[begin_idx..begin]);
-            parts.push_str(before);
-            parts.push_str(&self.doc.content[begin..end]);
-            parts.push_str(after);
-            begin_idx = end;
-        }
-        parts.push_str(&self.doc.content[begin_idx..]);
-        parts
-    }
-}
+use util::*;
+use super::*;
+use Query::*;
 
 /// A basic implementation of an `Index`, the inverted index is a data structure that maps
 /// from words to postings.
@@ -129,10 +19,6 @@ pub struct InvertedIndex {
     // Maps doc ids to their docs
     docs: BTreeMap<String, Document>,
 }
-
-/// A Postings map (doc id => highlights) for a single term.
-/// Records which Documents contain the term, and at which locations in the documents.
-pub type PostingsMap = BTreeMap<String, Vec<(usize, usize)>>;
 
 impl InvertedIndex {
     pub fn new() -> InvertedIndex {
@@ -204,68 +90,8 @@ impl InvertedIndex {
                                                                 index_map.into_iter().collect())
                                           })
                                           .collect();
-        results.sort_by(|result1, result2| result2.score.partial_cmp(&result1.score).unwrap());
+        results.sort_by(|result1, result2| result2.score().partial_cmp(&result1.score()).unwrap());
         results
-    }
-}
-
-trait PostingsMerge {
-    fn merge_postings(self) -> PostingsMap;
-}
-
-impl<'a, Iter> PostingsMerge for Iter 
-    where Iter: Iterator,
-          Iter::Item: Borrow<PostingsMap> {
-    fn merge_postings(self) -> PostingsMap {
-        let mut map = PostingsMap::new();
-        for tree in self {
-            let tree = tree.borrow();
-            for (doc_id, highlights) in tree.iter() {
-                match map.entry(doc_id.clone()) {
-                    Vacant(entry) => {
-                        entry.insert(highlights.clone());
-                    }
-                    Occupied(mut entry) => {
-                        let entry = entry.get_mut();
-                        for highlight in highlights {
-                            if let Err(idx) = entry.binary_search(highlight) {
-                                entry.coalesce(idx, highlight.clone());
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        map
-    }
-}
-
-
-trait PostingsIntersect {
-    fn intersect_postings(self) -> PostingsMap;
-}
-
-impl<'a> PostingsIntersect for &'a [PostingsMap] {
-    fn intersect_postings(self) -> PostingsMap {
-        match self {
-            [] => PostingsMap::new(),
-            [ref posting] => posting.clone(),
-            [ref posting0, rest..] => {
-                self.intersection()
-                    .map(|doc_id| {
-                        let mut highlights = posting0[doc_id].clone();
-                        for posting in rest {
-                            for highlight in &posting[doc_id] {
-                                if let Err(idx) = highlights.binary_search(highlight) {
-                                    highlights.coalesce(idx, *highlight);
-                                }
-                            }
-                        }
-                        (doc_id.clone(), highlights)
-                    })
-                    .collect()
-            }
-        }
     }
 }
 
@@ -332,8 +158,8 @@ impl FnOnce<(usize,)> for Ngrams {
 
 #[cfg(test)]
 mod test {
-    use super::*;
-    use query::Query::{And, Match, Or};
+    use super::super::*;
+    use Query::{And, Match, Or};
     use std::collections::BTreeMap;
 
     #[test]
