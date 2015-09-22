@@ -87,7 +87,7 @@ impl InvertedIndex {
         let mut results: Vec<_> = postings.into_iter()
                                           .map(|(doc_id, index_map)| {
                                               SearchResult::new(&self.docs[&doc_id],
-                                                                index_map.into_iter().collect())
+                                                                index_map)
                                           })
                                           .collect();
         results.sort_by(|result1, result2| result2.score().partial_cmp(&result1.score()).unwrap());
