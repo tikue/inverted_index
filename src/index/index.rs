@@ -90,7 +90,7 @@ impl InvertedIndex {
                                                                 index_map)
                                           })
                                           .collect();
-        results.sort_by(|result1, result2| result2.score().partial_cmp(&result1.score()).unwrap());
+        results.sort_by(|result1, result2| result2.score.partial_cmp(&result1.score).unwrap());
         results
     }
 }
