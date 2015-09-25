@@ -2,6 +2,9 @@
 name = "inverted_index"
 version = "0.1.0"
 authors = ["Tim Kuehn <tim@solvvy.com>"]
+repository = "https://github.com/tikue/inverted_index"
+keywords = ["inverted", "index", "search", "postings", "information", "retrieval", "ir"]
+license = "MIT"
 
 [dependencies]
 itertools = "*"
