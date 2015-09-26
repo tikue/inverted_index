@@ -22,8 +22,7 @@ impl<'a, Iter> PostingsMerge for Iter
     fn merge_postings(self) -> PostingsMap {
         let mut map = PostingsMap::new();
         for tree in self {
-            let tree = tree.borrow();
-            for (doc_id, highlights) in tree.iter() {
+            for (doc_id, highlights) in tree.borrow() {
                 match map.entry(doc_id.clone()) {
                     Vacant(entry) => {
                         entry.insert(highlights.clone());
