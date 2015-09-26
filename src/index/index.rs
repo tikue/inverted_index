@@ -46,13 +46,12 @@ impl InvertedIndex {
         }
 
         for (ngram, highlighted) in analyzed {
-            let mut highlights = self.index
-                                     .entry(ngram)
-                                     .or_insert_with(BTreeMap::new)
-                                     .entry(doc.id.clone())
-                                     .or_insert_with(Vec::new);
-            let coalesce_idx = highlights.binary_search(&highlighted).err().unwrap();
-            highlights.coalesce(coalesce_idx, highlighted);
+            self.index
+                .entry(ngram)
+                .or_insert_with(BTreeMap::new)
+                .entry(doc.id.clone())
+                .or_insert_with(Vec::new)
+                .search_coalesce(0, highlighted);
         }
     }
 
