@@ -48,8 +48,9 @@ impl<T: Ord + Copy + Merge> Coalesce<T> for Vec<T> {
 
     fn search_coalesce(&mut self, start: usize, el: T) -> usize {
         match self[start..].binary_search(&el) {
-            Ok(idx) => idx,
+            Ok(idx) => start + idx,
             Err(idx) => {
+                let idx = start + idx;
                 self.coalesce(idx, el);
                 idx
             }
@@ -140,4 +141,17 @@ fn test_coalesce_subrange() {
     let mut v = vec![(0, 3)];
     v.coalesce(1, (1, 2));
     assert_eq!(v, [(0, 3)]);
+}
+
+#[test]
+fn test_search_coalesce() {
+    let mut v = vec![(0, 1), (2, 3), (4, 5), (6, 7)];
+    assert_eq!(2, v.search_coalesce(1, (4, 5)));
+}
+
+#[test]
+fn test_search_coalesce_2() {
+    let mut v = vec![(0, 1), (2, 3), (4, 5), (6, 7)];
+    assert_eq!(3, v.search_coalesce(1, (5, 6)));
+    assert_eq!(v, [(0, 1), (2, 3), (4, 7)]);
 }
