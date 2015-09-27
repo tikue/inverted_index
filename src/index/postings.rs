@@ -73,4 +73,16 @@ impl<'a> PostingsIntersect for &'a [PostingsMap] {
     }
 }
 
+#[cfg(test)]
+mod test {
+    use std::iter;
+    use super::PostingsMerge;
 
+    #[test]
+    fn test_merge() {
+        let postings = [iter::once(("1".into(), vec![(0, 1), (2, 3)])).collect(),
+                        iter::once(("1".into(), vec![(4, 5), (6, 7)])).collect()];
+        assert_eq!(postings.iter().merge_postings(), 
+                   iter::once(("1".into(), vec![(0, 1), (2, 3), (4, 5), (6, 7)])).collect());
+    }
+}
