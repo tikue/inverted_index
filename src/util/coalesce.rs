@@ -155,3 +155,38 @@ fn test_search_coalesce_2() {
     assert_eq!(3, v.search_coalesce(1, (5, 6)));
     assert_eq!(v, [(0, 1), (2, 3), (4, 7)]);
 }
+
+/// An extension trait for ordered vectors for inserting in order
+pub trait InsertSorted {
+    /// The type of ordered element in the collection
+    type Element: Ord;
+    /// Searches from the given index for the location to insert element, then inserts it.
+    fn insert_sorted(&mut self, start: usize, element: Self::Element) -> usize;
+}
+
+impl<T: Ord> InsertSorted for Vec<T> {
+    type Element = T;
+    fn insert_sorted(&mut self, start: usize, element: T) -> usize {
+        let idx = match self[start..].binary_search(&element) {
+            Ok(idx) => idx,
+            Err(idx) => idx,
+        } + start;
+        self.insert(idx, element);
+        idx
+    }
+}
+
+#[test]
+fn test_insert_sorted() {
+    let mut v = vec![0, 1, 2, 3, 4];
+    v.insert_sorted(3, 5);
+    assert_eq!(v, [0, 1, 2, 3, 4, 5]);
+}
+
+#[test]
+fn test_insert_sorted_front() {
+    let mut v = vec![1, 2, 3, 4];
+    v.insert_sorted(0, 0);
+    assert_eq!(v, [0, 1, 2, 3, 4]);
+}
+

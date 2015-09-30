@@ -4,9 +4,49 @@ use std::collections::btree_map::Entry::*;
 
 use util::*;
 
+/// Information about the position of a single term
+/// within a document
+#[derive(Clone, Debug)]
+pub struct PositionInfo {
+    /// Pairs of byte indexes into the document at the beginning and end of the term
+    doc_offsets: Vec<(usize, usize)>,
+    /// The token positions of the term.
+    /// For example, for the sentence "I have to go to the store",
+    /// the term "to" has positions [2, 4].
+    token_positions: Vec<usize>
+}
+
+impl PositionInfo {
+    /// Returns a new, empty, PositionInfo
+    pub fn new() -> PositionInfo {
+        PositionInfo {
+            doc_offsets: vec![],
+            token_positions: vec![],
+        }
+    }
+
+    /// Merges the offsets and positions from one PositionInfo into itself.
+    /// FIXME(tjk): this doesn't seem very useful, because if the position infos were
+    /// for different terms, that information is lost after merging.
+    pub fn merge(&mut self, other: &PositionInfo) {
+        let mut last_idx = 0;
+        for &offset in &other.doc_offsets {
+            last_idx = self.doc_offsets.search_coalesce(last_idx, offset);
+        }
+
+        let mut last_idx = 0;
+        for &position in &other.token_positions {
+            last_idx = self.token_positions.insert_sorted(last_idx, position);
+        }
+    }
+}
+
+/// Each document is assigned a unique string id.
+pub type DocId = String;
+
 /// A Postings map (doc id => highlights) for a single term.
 /// Records which Documents contain the term, and at which locations in the documents.
-pub type PostingsMap = BTreeMap<String, Vec<(usize, usize)>>;
+pub type PostingsMap = BTreeMap<DocId, PositionInfo>;
 
 
 /// An extension trait for iterables over PostingsMaps
@@ -22,18 +62,12 @@ impl<'a, Iter> PostingsMerge for Iter
     fn merge_postings(self) -> PostingsMap {
         let mut map = PostingsMap::new();
         for tree in self {
-            for (doc_id, highlights) in tree.borrow() {
+            for (doc_id, position_info) in tree.borrow() {
                 match map.entry(doc_id.clone()) {
                     Vacant(entry) => {
-                        entry.insert(highlights.clone());
+                        entry.insert(position_info.clone());
                     }
-                    Occupied(mut entry) => {
-                        let entry = entry.get_mut();
-                        let mut last_search = 0;
-                        for &highlight in highlights {
-                            last_search = entry.search_coalesce(last_search, highlight);
-                        }
-                    }
+                    Occupied(mut entry) => entry.get_mut().merge(position_info),
                 }
             }
         }
@@ -58,14 +92,11 @@ impl<'a> PostingsIntersect for &'a [PostingsMap] {
             [ref posting0, rest..] => {
                 self.intersection()
                     .map(|doc_id| {
-                        let mut highlights = posting0[doc_id].clone();
+                        let mut position_info = posting0[doc_id].clone();
                         for posting in rest {
-                            let mut last_search = 0;
-                            for &highlight in &posting[doc_id] {
-                                last_search = highlights.search_coalesce(last_search, highlight);
-                            }
+                            position_info.merge(&posting[doc_id]);
                         }
-                        (doc_id.clone(), highlights)
+                        (doc_id.clone(), position_info)
                     })
                     .collect()
             }
