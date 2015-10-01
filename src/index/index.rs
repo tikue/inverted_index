@@ -94,16 +94,14 @@ impl InvertedIndex {
     }
 }
 
-#[allow(unused_attributes)]
-#[rustfmt_skip]
-fn analyze_doc(doc: &str) ->
-    iter::FlatMap<
-        iter::Filter<
-            GroupBy<bool, CharIndices, fn(&(usize, char)) -> bool>,
-            fn(&(bool, Vec<(usize, char)>)) -> bool>,
-        iter::Map<ops::Range<usize>, Ngrams>,
-        fn((bool, Vec<(usize, char)>)) -> iter::Map<ops::Range<usize>, Ngrams>>
-{
+type Tokens<'a> = iter::FlatMap<
+                iter::Filter<
+                    GroupBy<bool, CharIndices<'a>, fn(&(usize, char)) -> bool>,
+                    fn(&(bool, Vec<(usize, char)>)) -> bool>,
+                iter::Map<ops::Range<usize>, Ngrams>,
+                fn((bool, Vec<(usize, char)>)) -> iter::Map<ops::Range<usize>, Ngrams>>;
+
+fn analyze_doc(doc: &str) -> Tokens {
     doc.char_indices()
         .group_by(is_whitespace as fn(&(usize, char)) -> bool)
         .filter(not_whitespace as fn(&(bool, Vec<(usize, char)>)) -> bool)
