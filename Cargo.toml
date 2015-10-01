@@ -9,4 +9,4 @@ license = "MIT"
 [dependencies]
 itertools = "*"
 rustc-serialize = "*"
-clippy = "*"
+clippy = { git = "https://github.com/Manishearth/rust-clippy" }
