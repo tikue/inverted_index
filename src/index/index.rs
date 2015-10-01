@@ -23,7 +23,10 @@ pub struct InvertedIndex {
 impl InvertedIndex {
     /// Constructs a new, empty InvertedIndex
     pub fn new() -> InvertedIndex {
-        InvertedIndex { index: BTreeMap::new(), docs: BTreeMap::new() }
+        InvertedIndex {
+            index: BTreeMap::new(),
+            docs: BTreeMap::new(),
+        }
     }
 
     /// A basic implementation of index, splits the document's content into whitespace-separated
@@ -85,8 +88,7 @@ impl InvertedIndex {
     fn compute_results(&self, postings: PostingsMap) -> Vec<SearchResult> {
         let mut results: Vec<_> = postings.into_iter()
                                           .map(|(doc_id, index_map)| {
-                                              SearchResult::new(&self.docs[&doc_id],
-                                                                index_map)
+                                              SearchResult::new(&self.docs[&doc_id], index_map)
                                           })
                                           .collect();
         results.sort_by(|result1, result2| result2.score.partial_cmp(&result1.score).unwrap());
@@ -103,9 +105,9 @@ type Tokens<'a> = iter::FlatMap<
 
 fn analyze_doc(doc: &str) -> Tokens {
     doc.char_indices()
-        .group_by(is_whitespace as fn(&(usize, char)) -> bool)
-        .filter(not_whitespace as fn(&(bool, Vec<(usize, char)>)) -> bool)
-        .flat_map(ngrams)
+       .group_by(is_whitespace as fn(&(usize, char)) -> bool)
+       .filter(not_whitespace as fn(&(bool, Vec<(usize, char)>)) -> bool)
+       .flat_map(ngrams)
 }
 
 fn ngrams((_, chars): (bool, Vec<(usize, char)>)) -> iter::Map<ops::Range<usize>, Ngrams> {
@@ -174,7 +176,8 @@ mod test {
                                            .collect();
         assert_eq!(search_results.len(), expected.len());
         for search_result in &search_results {
-            assert_eq!(&search_result.highlights, &expected[search_result.doc])
+            assert_eq!(&search_result.highlights,
+                       &expected[search_result.doc])
         }
         assert_eq!("learn <span class=highlight>to</span> program in rust <span \
                     class=highlight>to</span>day",
@@ -188,7 +191,8 @@ mod test {
     #[test]
     fn test_highlight() {
         let mut index = InvertedIndex::new();
-        let doc1 = Document::new("2", "Won\u{2019}t this split the ecosystem? Will everyone use?");
+        let doc1 = Document::new("2",
+                                 "Won\u{2019}t this split the ecosystem? Will everyone use?");
         index.index(doc1.clone());
         let expected = "Won\u{2019}t this split the *e*cosystem? Will *e*veryone use?";
         let search_results = index.search("e");
@@ -288,7 +292,8 @@ mod test {
                                            .collect();
         assert_eq!(search_results.len(), expected.len());
         for search_result in &search_results {
-            assert_eq!(&search_result.highlights, &expected[search_result.doc])
+            assert_eq!(&search_result.highlights,
+                       &expected[search_result.doc])
         }
     }
 
@@ -301,14 +306,16 @@ mod test {
         index.index(doc1.clone());
         index.index(doc2.clone());
         index.index(doc3.clone());
-        let search_results = index.query(&Or(&[Match("you"), And(&[Match("today"), Match("you")])]));
+        let search_results = index.query(&Or(&[Match("you"),
+                                               And(&[Match("today"), Match("you")])]));
         let expected: BTreeMap<_, _> = [(doc2, vec![(9, 12), (13, 18)]), (doc3, vec![(9, 12)])]
                                            .iter()
                                            .cloned()
                                            .collect();
         assert_eq!(search_results.len(), expected.len());
         for search_result in &search_results {
-            assert_eq!(&search_result.highlights, &expected[search_result.doc])
+            assert_eq!(&search_result.highlights,
+                       &expected[search_result.doc])
         }
     }
 }
