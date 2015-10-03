@@ -27,20 +27,9 @@ impl Position {
 }
 
 impl Merge for Position {
-    fn merge(self,
-             Position { offsets: (begin2, end2), position: position2 }: Position)
-             -> Option<Position> {
-        let Position{offsets: (begin1, end1), position: position1} = self;
-        assert!(begin2 >= begin1);
-        if position1 == position2 && end1 >= begin2 {
-            Some(Position {
-                offsets: if end1 < end2 {
-                    (begin1, end2)
-                } else {
-                    (begin1, end1)
-                },
-                position: position1,
-            })
+    fn merge(self, other: Position) -> Option<Position> {
+        if self.position == other.position {
+            self.offsets.merge(other.offsets).map(|offsets| Position::new(offsets, self.position))
         } else {
             None
         }
