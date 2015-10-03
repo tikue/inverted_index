@@ -77,10 +77,11 @@ impl<T: Ord + Copy + Merge> Coalesce for Vec<T> {
 macro_rules! impl_merge_tuples {
     ($tp:ident) => (
         impl Merge for ($tp, $tp) {
-            fn merge(self, (x2, y2): ($tp, $tp))  -> Option<($tp, $tp)> {
-                let (x1, y1) = self;
-                if y1 >= x2 {
-                    Some(if y1 < y2 { (x1, y2) } else { (x1, y1) })
+            fn merge(self, (begin2, end2): ($tp, $tp))  -> Option<($tp, $tp)> {
+                let (begin1, end1) = self;
+                assert!(begin2 >= begin1, "Input's begin must be >= self's begin");
+                if end1 >= begin2 {
+                    Some(if end1 < end2 { (begin1, end2) } else { (begin1, end1) })
                 } else {
                     None
                 }
