@@ -1,4 +1,4 @@
-use super::Document;
+use super::{Document, Position};
 
 /// A SearchResult is the representation of a Document returned for a specific set of search
 /// terms. It is unique upon the document and the vec of highlight indices. It also contains a
@@ -7,22 +7,22 @@ use super::Document;
 pub struct SearchResult<'a> {
     /// The document returned for the search
     pub doc: &'a Document,
-    /// The indices of the terms in the document that matched the search
-    pub highlights: Vec<(usize, usize)>,
+    /// The positions of the terms in the document that matched the search
+    pub positions: Vec<Position>,
     /// The search score, for use in ranking documents
     pub score: f32,
 }
 
 impl<'a> SearchResult<'a> {
-    /// Constructs a new SearchResult from the given Document and highlights.
-    /// Computes the score using the highlights and the document length
-    pub fn new(doc: &'a Document, highlights: Vec<(usize, usize)>) -> SearchResult<'a> {
+    /// Constructs a new SearchResult from the given Document and term positions.
+    /// Computes the score using the positions and the document length
+    pub fn new(doc: &'a Document, positions: Vec<Position>) -> SearchResult<'a> {
         SearchResult {
-            score: highlights.iter()
-                .map(|&(begin, end)| end - begin)
+            score: positions.iter()
+                .map(|&Position{offsets:(begin, end), ..}| end - begin)
                 .sum::<usize>() as f32 / (doc.content().len() as f32).sqrt(),
             doc: doc,
-            highlights: highlights
+            positions: positions
         }
     }
 
@@ -35,8 +35,8 @@ impl<'a> SearchResult<'a> {
     ///
     /// Each `(usize, usize)` indicates the start and end of a term in the document's content
     /// that should be highlighted.
-    pub fn highlights(&self) -> &Vec<(usize, usize)> {
-        &self.highlights
+    pub fn positions(&self) -> &[Position] {
+        &self.positions
     }
 
     /// Returns the search result's score.
@@ -53,7 +53,7 @@ impl<'a> SearchResult<'a> {
     pub fn highlight(&self, before: &str, after: &str) -> String {
         let mut begin_idx = 0;
         let mut parts = String::new();
-        for &(begin, end) in &self.highlights {
+        for &Position{offsets:(begin, end), ..} in &self.positions {
             parts.push_str(&self.doc.content()[begin_idx..begin]);
             parts.push_str(before);
             parts.push_str(&self.doc.content()[begin..end]);

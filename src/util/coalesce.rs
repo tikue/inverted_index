@@ -7,14 +7,30 @@ pub trait Merge: Ord + Copy {
 /// Enables the ability to coalesce items in a collection
 /// Coalescence occurs when two items in the collection are merged
 /// in lieu of inserting a new item
-pub trait Coalesce<T: Ord + Copy + Merge> {
+pub trait Coalesce {
+    /// The type of element that can be coalesced.
+    type Element: Ord + Copy + Merge;
+
     /// Inserts or merges, if possible, the item into the collection at the given index.
-    fn coalesce(&mut self, index: usize, el: T); 
+    fn coalesce(&mut self, index: usize, el: Self::Element); 
     /// Searches for the index to insert the element in order, then coalesces at the found index;
-    fn search_coalesce(&mut self, start: usize, el: T) -> usize;
+    fn search_coalesce(&mut self, start: usize, el: Self::Element) -> usize;
+
+    /// Inserts, in order, the elements of an ordered iterable into self.
+    /// Duplicate elements are not inserted.
+    fn merge_coalesce<Iter>(&mut self, iter: Iter)
+        where Iter: IntoIterator<Item=Self::Element>
+    {
+        let mut idx = 0;
+        for element in iter {
+            idx = self.search_coalesce(idx, element);
+        }
+    }
 }
 
-impl<T: Ord + Copy + Merge> Coalesce<T> for Vec<T> {
+impl<T: Ord + Copy + Merge> Coalesce for Vec<T> {
+    type Element = T;
+
     fn coalesce(&mut self, index: usize, el: T)  {
         let merge = T::merge;
         if self.is_empty() {
@@ -64,7 +80,7 @@ macro_rules! impl_merge_tuples {
             fn merge(self, (x2, y2): ($tp, $tp))  -> Option<($tp, $tp)> {
                 let (x1, y1) = self;
                 if y1 >= x2 {
-                    if y1 < y2 { Some((x1, y2)) } else { Some((x1, y1)) }
+                    Some(if y1 < y2 { (x1, y2) } else { (x1, y1) })
                 } else {
                     None
                 }
@@ -155,38 +171,3 @@ fn test_search_coalesce_2() {
     assert_eq!(3, v.search_coalesce(1, (5, 6)));
     assert_eq!(v, [(0, 1), (2, 3), (4, 7)]);
 }
-
-/// An extension trait for ordered vectors for inserting in order
-pub trait InsertSorted {
-    /// The type of ordered element in the collection
-    type Element: Ord;
-    /// Searches from the given index for the location to insert element, then inserts it.
-    fn insert_sorted(&mut self, start: usize, element: Self::Element) -> usize;
-}
-
-impl<T: Ord> InsertSorted for Vec<T> {
-    type Element = T;
-    fn insert_sorted(&mut self, start: usize, element: T) -> usize {
-        let idx = match self[start..].binary_search(&element) {
-            Ok(idx) => idx,
-            Err(idx) => idx,
-        } + start;
-        self.insert(idx, element);
-        idx
-    }
-}
-
-#[test]
-fn test_insert_sorted() {
-    let mut v = vec![0, 1, 2, 3, 4];
-    v.insert_sorted(3, 5);
-    assert_eq!(v, [0, 1, 2, 3, 4, 5]);
-}
-
-#[test]
-fn test_insert_sorted_front() {
-    let mut v = vec![1, 2, 3, 4];
-    v.insert_sorted(0, 0);
-    assert_eq!(v, [0, 1, 2, 3, 4]);
-}
-

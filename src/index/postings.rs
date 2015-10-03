@@ -4,39 +4,39 @@ use std::collections::btree_map::Entry::*;
 
 use util::*;
 
-/// Information about the position of a single term
-/// within a document
-#[derive(Clone, Debug)]
-pub struct PositionInfo {
-    /// Pairs of byte indexes into the document at the beginning and end of the term
-    doc_offsets: Vec<(usize, usize)>,
-    /// The token positions of the term.
+/// Information about the position of a single term within a document
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, RustcEncodable)]
+pub struct Position {
+    /// Pair of byte indexes into the document at the beginning (inclusive) and end (exclusive) of 
+    /// the term.
+    pub offsets: (usize, usize),
+    /// The token position of the term, i.e., the number of tokens that occur before it in the doc.
     /// For example, for the sentence "I have to go to the store",
     /// the term "to" has positions [2, 4].
-    token_positions: Vec<usize>
+    pub position: usize,
 }
 
-impl PositionInfo {
-    /// Returns a new, empty, PositionInfo
-    pub fn new() -> PositionInfo {
-        PositionInfo {
-            doc_offsets: vec![],
-            token_positions: vec![],
+impl Position {
+    /// Creates a new Position struct with the given offsets and position.
+    pub fn new(offsets: (usize, usize), position: usize) -> Position {
+        Position {
+            offsets: offsets,
+            position: position,
         }
     }
+}
 
-    /// Merges the offsets and positions from one PositionInfo into itself.
-    /// FIXME(tjk): this doesn't seem very useful, because if the position infos were
-    /// for different terms, that information is lost after merging.
-    pub fn merge(&mut self, other: &PositionInfo) {
-        let mut last_idx = 0;
-        for &offset in &other.doc_offsets {
-            last_idx = self.doc_offsets.search_coalesce(last_idx, offset);
-        }
-
-        let mut last_idx = 0;
-        for &position in &other.token_positions {
-            last_idx = self.token_positions.insert_sorted(last_idx, position);
+impl Merge for Position {
+    fn merge(self, Position{offsets:(begin2, end2), position: position2}: Position)  -> Option<Position> {
+        let Position{offsets: (begin1, end1), position: position1} = self;
+        assert!(begin2 >= begin1);
+        if position1 == position2 && end1 >= begin2 {
+            Some(Position {
+                offsets: if end1 < end2 { (begin1, end2) } else { (begin1, end1) },
+                position: position1
+            })
+        } else {
+            None
         }
     }
 }
@@ -44,10 +44,9 @@ impl PositionInfo {
 /// Each document is assigned a unique string id.
 pub type DocId = String;
 
-/// A Postings map (doc id => highlights) for a single term.
+/// A Postings map (doc id => positions) for a single term.
 /// Records which Documents contain the term, and at which locations in the documents.
-pub type PostingsMap = BTreeMap<DocId, PositionInfo>;
-
+pub type PostingsMap = BTreeMap<DocId, Vec<Position>>;
 
 /// An extension trait for iterables over PostingsMaps
 /// that enables the computation of the union of Postingsmaps
@@ -62,19 +61,16 @@ impl<'a, Iter> PostingsMerge for Iter
     fn merge_postings(self) -> PostingsMap {
         let mut map = PostingsMap::new();
         for tree in self {
-            for (doc_id, position_info) in tree.borrow() {
+            for (doc_id, positions) in tree.borrow() {
                 match map.entry(doc_id.clone()) {
-                    Vacant(entry) => {
-                        entry.insert(position_info.clone());
-                    }
-                    Occupied(mut entry) => entry.get_mut().merge(position_info),
+                    Vacant(entry) => { entry.insert(positions.clone()); }
+                    Occupied(mut entry) => entry.get_mut().merge_coalesce(positions.iter().cloned()),
                 }
             }
         }
         map
     }
 }
-
 
 /// An extension trait for slices of PostingsMaps,
 /// that enables the computation of the intersection
@@ -92,11 +88,11 @@ impl<'a> PostingsIntersect for &'a [PostingsMap] {
             [ref posting0, rest..] => {
                 self.intersection()
                     .map(|doc_id| {
-                        let mut position_info = posting0[doc_id].clone();
+                        let mut positions = posting0[doc_id].clone();
                         for posting in rest {
-                            position_info.merge(&posting[doc_id]);
+                            positions.merge_coalesce(posting[doc_id].iter().cloned());
                         }
-                        (doc_id.clone(), position_info)
+                        (doc_id.clone(), positions)
                     })
                     .collect()
             }
@@ -107,13 +103,14 @@ impl<'a> PostingsIntersect for &'a [PostingsMap] {
 #[cfg(test)]
 mod test {
     use std::iter;
+    use super::super::Position;
     use super::PostingsMerge;
 
     #[test]
     fn test_merge() {
-        let postings = [iter::once(("1".into(), vec![(0, 1), (2, 3)])).collect(),
-                        iter::once(("1".into(), vec![(4, 5), (6, 7)])).collect()];
+        let postings = [iter::once(("1".into(), vec![Position::new((0, 1), 0), Position::new((2, 3), 1)])).collect(),
+                        iter::once(("1".into(), vec![Position::new((4, 5), 2), Position::new((6, 7), 3)])).collect()];
         assert_eq!(postings.iter().merge_postings(), 
-                   iter::once(("1".into(), vec![(0, 1), (2, 3), (4, 5), (6, 7)])).collect());
+                   iter::once(("1".into(), vec![Position::new((0, 1), 0), Position::new((2, 3), 1), Position::new((4, 5), 2), Position::new((6, 7), 3)])).collect());
     }
 }
