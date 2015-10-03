@@ -12,14 +12,14 @@ pub trait Coalesce {
     type Element: Ord + Copy + Merge;
 
     /// Inserts or merges, if possible, the item into the collection at the given index.
-    fn coalesce(&mut self, index: usize, el: Self::Element); 
+    fn coalesce(&mut self, index: usize, el: Self::Element);
     /// Searches for the index to insert the element in order, then coalesces at the found index;
     fn search_coalesce(&mut self, start: usize, el: Self::Element) -> usize;
 
     /// Inserts, in order, the elements of an ordered iterable into self.
     /// Duplicate elements are not inserted.
     fn merge_coalesce<Iter>(&mut self, iter: Iter)
-        where Iter: IntoIterator<Item=Self::Element>
+        where Iter: IntoIterator<Item = Self::Element>
     {
         let mut idx = 0;
         for element in iter {
@@ -31,7 +31,7 @@ pub trait Coalesce {
 impl<T: Ord + Copy + Merge> Coalesce for Vec<T> {
     type Element = T;
 
-    fn coalesce(&mut self, index: usize, el: T)  {
+    fn coalesce(&mut self, index: usize, el: T) {
         let merge = T::merge;
         if self.is_empty() {
             self.insert(index, el);

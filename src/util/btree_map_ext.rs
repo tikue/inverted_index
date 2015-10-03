@@ -2,8 +2,8 @@ use std::collections::btree_map::{BTreeMap, Keys};
 
 /// A lazy iterator producing elements in the set intersection (in-order).
 #[derive(Clone)]
-pub struct Intersection<K, Iter: Iterator<Item=K>> {
-    iters: Vec<Iter>
+pub struct Intersection<K, Iter: Iterator<Item = K>> {
+    iters: Vec<Iter>,
 }
 
 impl<K: Ord, V: Iterator<Item=K>> Iterator for Intersection<K, V> {
@@ -12,7 +12,7 @@ impl<K: Ord, V: Iterator<Item=K>> Iterator for Intersection<K, V> {
     fn next(&mut self) -> Option<K> {
         let mut maximum = match self.iters.first_mut().map(Iterator::next) {
             Some(Some(k)) => k,
-            _ => return None
+            _ => return None,
         };
 
         // Where the maximum came from
@@ -25,8 +25,10 @@ impl<K: Ord, V: Iterator<Item=K>> Iterator for Intersection<K, V> {
             // ...match all iters front element
             // with the chosen maximum
             for (i, iter) in self.iters.iter_mut().enumerate() {
-                if i == skip_nth { continue; }
-            
+                if i == skip_nth {
+                    continue;
+                }
+
                 match iter.find(|x| x >= &maximum) {
                     Some(val) => if val > maximum {
                         retry_with = Some(val);
@@ -41,7 +43,7 @@ impl<K: Ord, V: Iterator<Item=K>> Iterator for Intersection<K, V> {
 
             match retry_with {
                 Some(new_maximum) => maximum = new_maximum,
-                None => return Some(maximum)
+                None => return Some(maximum),
             }
         }
     }
@@ -83,7 +85,7 @@ impl<'a, K: Ord, V> BTreeMapExt for &'a [BTreeMap<K, V>] {
     type Key = &'a K;
     type Iter = Keys<'a, K, V>;
     fn intersection(self) -> Intersection<&'a K, Keys<'a, K, V>> {
-        Intersection{iters: self.iter().map(|map| map.keys()).collect() }
+        Intersection { iters: self.iter().map(|map| map.keys()).collect() }
     }
 }
 

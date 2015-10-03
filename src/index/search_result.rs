@@ -22,7 +22,7 @@ impl<'a> SearchResult<'a> {
                 .map(|&Position{offsets:(begin, end), ..}| end - begin)
                 .sum::<usize>() as f32 / (doc.content().len() as f32).sqrt(),
             doc: doc,
-            positions: positions
+            positions: positions,
         }
     }
 
@@ -64,5 +64,3 @@ impl<'a> SearchResult<'a> {
         parts
     }
 }
-
-

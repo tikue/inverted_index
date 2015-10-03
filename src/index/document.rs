@@ -17,7 +17,10 @@ impl Document {
         where S: Into<String>,
               T: Into<String>
     {
-        Document { id: id.into(), content: content.into() }
+        Document {
+            id: id.into(),
+            content: content.into(),
+        }
     }
 
     /// Returns a reference to the document's id

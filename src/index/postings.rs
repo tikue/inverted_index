@@ -27,13 +27,19 @@ impl Position {
 }
 
 impl Merge for Position {
-    fn merge(self, Position{offsets:(begin2, end2), position: position2}: Position)  -> Option<Position> {
+    fn merge(self,
+             Position { offsets: (begin2, end2), position: position2 }: Position)
+             -> Option<Position> {
         let Position{offsets: (begin1, end1), position: position1} = self;
         assert!(begin2 >= begin1);
         if position1 == position2 && end1 >= begin2 {
             Some(Position {
-                offsets: if end1 < end2 { (begin1, end2) } else { (begin1, end1) },
-                position: position1
+                offsets: if end1 < end2 {
+                    (begin1, end2)
+                } else {
+                    (begin1, end1)
+                },
+                position: position1,
             })
         } else {
             None
@@ -55,7 +61,7 @@ pub trait PostingsMerge {
     fn merge_postings(self) -> PostingsMap;
 }
 
-impl<'a, Iter> PostingsMerge for Iter 
+impl<'a, Iter> PostingsMerge for Iter
     where Iter: IntoIterator,
           Iter::Item: Borrow<PostingsMap> {
     fn merge_postings(self) -> PostingsMap {
@@ -63,8 +69,11 @@ impl<'a, Iter> PostingsMerge for Iter
         for tree in self {
             for (doc_id, positions) in tree.borrow() {
                 match map.entry(doc_id.clone()) {
-                    Vacant(entry) => { entry.insert(positions.clone()); }
-                    Occupied(mut entry) => entry.get_mut().merge_coalesce(positions.iter().cloned()),
+                    Vacant(entry) => {
+                        entry.insert(positions.clone());
+                    }
+                    Occupied(mut entry) =>
+                        entry.get_mut().merge_coalesce(positions.iter().cloned()),
                 }
             }
         }
@@ -108,9 +117,18 @@ mod test {
 
     #[test]
     fn test_merge() {
-        let postings = [iter::once(("1".into(), vec![Position::new((0, 1), 0), Position::new((2, 3), 1)])).collect(),
-                        iter::once(("1".into(), vec![Position::new((4, 5), 2), Position::new((6, 7), 3)])).collect()];
-        assert_eq!(postings.iter().merge_postings(), 
-                   iter::once(("1".into(), vec![Position::new((0, 1), 0), Position::new((2, 3), 1), Position::new((4, 5), 2), Position::new((6, 7), 3)])).collect());
+        let postings = [iter::once(("1".into(),
+                                    vec![Position::new((0, 1), 0), Position::new((2, 3), 1)]))
+                            .collect(),
+                        iter::once(("1".into(),
+                                    vec![Position::new((4, 5), 2), Position::new((6, 7), 3)]))
+                            .collect()];
+        assert_eq!(postings.iter().merge_postings(),
+                   iter::once(("1".into(),
+                               vec![Position::new((0, 1), 0),
+                                    Position::new((2, 3), 1),
+                                    Position::new((4, 5), 2),
+                                    Position::new((6, 7), 3)]))
+                       .collect());
     }
 }

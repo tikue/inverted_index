@@ -113,7 +113,8 @@ fn analyze_doc(doc: &str) -> Tokens {
        .flat_map(ngrams)
 }
 
-fn ngrams((position, (_, chars)): (usize, (bool, Vec<(usize, char)>))) -> iter::Map<ops::Range<usize>, Ngrams> {
+fn ngrams((position, (_, chars)): (usize, (bool, Vec<(usize, char)>)))
+          -> iter::Map<ops::Range<usize>, Ngrams> {
     (1..chars.len() + 1).map(Ngrams::new(position, chars))
 }
 
@@ -132,7 +133,10 @@ struct Ngrams {
 
 impl Ngrams {
     fn new(position: usize, chars: Vec<(usize, char)>) -> Ngrams {
-        Ngrams { position: position, chars: chars }
+        Ngrams {
+            position: position,
+            chars: chars,
+        }
     }
 }
 
@@ -142,7 +146,7 @@ impl Fn<(usize,)> for Ngrams {
         let start = self.chars[0].0;
         let (last_idx, last_char) = self.chars[to - 1];
         let finish = last_idx + last_char.len_utf8();
-        (word, Position { offsets: (start, finish), position: self.position })
+        (word, Position::new((start, finish), self.position))
     }
 }
 
@@ -258,7 +262,8 @@ mod test {
         index.index(doc.clone());
         let search_results = index.search("be b");
         assert_eq!(search_results.len(), 1);
-        assert_eq!(search_results[0].positions, vec![Position::new((0, 2), 0)]);
+        assert_eq!(search_results[0].positions,
+                   vec![Position::new((0, 2), 0)]);
     }
 
     #[test]
@@ -268,7 +273,8 @@ mod test {
         index.index(doc.clone());
         let search_results = index.search("bE");
         assert_eq!(search_results.len(), 1);
-        assert_eq!(search_results[0].positions, vec![Position::new((0, 2), 0)]);
+        assert_eq!(search_results[0].positions,
+                   vec![Position::new((0, 2), 0)]);
     }
 
     #[test]
@@ -278,7 +284,8 @@ mod test {
         index.index(doc.clone());
         let search_results = index.search("be");
         assert_eq!(search_results.len(), 1);
-        assert_eq!(search_results[0].positions, vec![Position::new((0, 2), 0)]);
+        assert_eq!(search_results[0].positions,
+                   vec![Position::new((0, 2), 0)]);
     }
 
     #[test]
@@ -291,7 +298,9 @@ mod test {
         index.index(doc2.clone());
         index.index(doc3.clone());
         let search_results = index.query(&And(&[Match("today"), Match("you")]));
-        let expected: BTreeMap<_, _> = [(doc2, vec![Position::new((9, 12), 2), Position::new((13, 18), 3)])]
+        let expected: BTreeMap<_, _> = [(doc2,
+                                         vec![Position::new((9, 12), 2),
+                                              Position::new((13, 18), 3)])]
                                            .iter()
                                            .cloned()
                                            .collect();
@@ -313,7 +322,10 @@ mod test {
         index.index(doc3.clone());
         let search_results = index.query(&Or(&[Match("you"),
                                                And(&[Match("today"), Match("you")])]));
-        let expected: BTreeMap<_, _> = [(doc2, vec![Position::new((9, 12), 2), Position::new((13, 18), 3)]), (doc3, vec![Position::new((9, 12), 2)])]
+        let expected: BTreeMap<_, _> = [(doc2,
+                                         vec![Position::new((9, 12), 2),
+                                              Position::new((13, 18), 3)]),
+                                        (doc3, vec![Position::new((9, 12), 2)])]
                                            .iter()
                                            .cloned()
                                            .collect();
