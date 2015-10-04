@@ -32,7 +32,6 @@ impl InvertedIndex {
     /// A basic implementation of index, splits the document's content into whitespace-separated
     /// words, and inserts each word-document pair into the map.
     pub fn index(&mut self, doc: Document) {
-        let analyzed = analyze_doc(doc.content());
         let previous_version = self.docs.insert(doc.id.clone(), doc.clone());
         if let Some(previous_version) = previous_version {
             let previous_analyzed = analyze_doc(previous_version.content());
@@ -48,6 +47,7 @@ impl InvertedIndex {
             }
         }
 
+        let analyzed = analyze_doc(doc.content());
         for (ngram, position) in analyzed {
             self.index
                 .entry(ngram)
