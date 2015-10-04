@@ -70,8 +70,25 @@ impl InvertedIndex {
     }
 
     fn postings(&self, query: &str) -> PostingsMap {
+        // TODO(tjk): split this out into `fn analyze(query: &str) -> Iterator<String>`
         let unique_terms: HashSet<_> = query.split_whitespace().map(str::to_lowercase).collect();
         unique_terms.into_iter().flat_map(|word| self.index.get(&word)).merge_postings()
+    }
+
+    fn phrase(&self, phrase: &str) -> PostingsMap {
+        // TODO(tjk): split this out into `fn analyze(query: &str) -> Iterator<String>`
+        let terms: Vec<_> = phrase.split_whitespace().map(str::to_lowercase).collect();
+        let postings: Vec<_> = terms.windows(2)
+            .map(|adjacent_terms| {
+            let term0 = &adjacent_terms[0];
+            let term1 = &adjacent_terms[1];
+            if let (Some(posting0), Some(posting1)) = (self.index.get(term0), self.index.get(term1)) {
+                posting0.intersect_positionally(posting1)
+            } else {
+                PostingsMap::new()
+            }
+        }).collect();
+        postings.intersect_postings()
     }
 
     fn query_rec(&self, query: &Query) -> PostingsMap {
@@ -82,7 +99,7 @@ impl InvertedIndex {
                 postings.intersect_postings()
             }
             Or(queries) => queries.into_iter().map(|q| self.query_rec(q)).merge_postings(),
-            Phrase(_) => PostingsMap::new(), // TODO
+            Phrase(phrase) => self.phrase(phrase)
         }
     }
 
@@ -334,5 +351,14 @@ mod test {
             assert_eq!(&search_result.positions,
                        &expected[search_result.doc])
         }
+    }
+
+    #[test]
+    fn test_phrase() {
+        let mut index = InvertedIndex::new();
+        let doc1 = Document::new("1", "learn to program in rust today");
+        index.index(doc1.clone());
+        println!("{:?}", index.phrase("learn to program"));
+        println!("{:?}", index.phrase("learn to pro"));
     }
 }

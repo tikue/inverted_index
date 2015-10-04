@@ -1,4 +1,5 @@
 use std::borrow::Borrow;
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::collections::btree_map::Entry::*;
 
@@ -95,6 +96,56 @@ impl<'a> PostingsIntersect for &'a [PostingsMap] {
                     .collect()
             }
         }
+    }
+}
+
+/// An extension trait for PostingsMaps which is useful in phrase query intersections.
+pub trait PositionalIntersect {
+    /// Intersect two postings maps positionally, returning a PostingsMap containing postings lists
+    /// whose terms are present at position X in self's postings list for document D
+    /// and position X + 1 in the input's postings list for document D.
+    fn intersect_positionally(&self, &Self) -> PostingsMap;
+}
+
+impl PositionalIntersect for PostingsMap {
+    fn intersect_positionally(&self, other: &Self) -> PostingsMap {
+        fn positional_intersect(left: &[Position], right: &[Position]) -> Vec<Position> {
+            let mut intersection = vec![];
+            let mut left = left.iter().cloned();
+            let mut right = right.iter().cloned();
+            let mut lval = left.next();
+            let mut rval = right.next();
+            loop {
+                if let (Some(l), Some(r)) = (lval, rval) {
+                    match l.position.cmp(&r.position) {
+                        Ordering::Less => {
+                            if l.position + 1 == r.position {
+                                if !intersection.is_empty() {
+                                    if intersection[intersection.len() - 1] != l {
+                                        intersection.push(l);
+                                    }
+                                } else {
+                                    intersection.push(l);
+                                }
+                                intersection.push(r);
+                                rval = right.next();
+                            }
+                            lval = left.next();
+                        }
+                        Ordering::Greater | Ordering::Equal => rval = right.next(),
+                    }
+                } else {
+                    return intersection;
+                }
+            }
+        }
+
+        let maps = &[self, other];
+        maps.intersection()
+            .map(|doc_id| {
+                (doc_id.clone(), positional_intersect(&self[doc_id], &other[doc_id]))
+            })
+            .collect()
     }
 }
 

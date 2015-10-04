@@ -10,8 +10,8 @@ impl<K: Ord, V: Iterator<Item=K>> Iterator for Intersection<K, V> {
     type Item = K;
 
     fn next(&mut self) -> Option<K> {
-        let mut maximum = match self.iters.first_mut().map(Iterator::next) {
-            Some(Some(k)) => k,
+        let mut maximum = match self.iters.first_mut().and_then(Iterator::next) {
+            Some(k) => k,
             _ => return None,
         };
 
@@ -82,6 +82,14 @@ pub trait BTreeMapExt {
 }
 
 impl<'a, K: Ord, V> BTreeMapExt for &'a [BTreeMap<K, V>] {
+    type Key = &'a K;
+    type Iter = Keys<'a, K, V>;
+    fn intersection(self) -> Intersection<&'a K, Keys<'a, K, V>> {
+        Intersection { iters: self.iter().map(|map| map.keys()).collect() }
+    }
+}
+
+impl<'a, K: Ord, V> BTreeMapExt for &'a [&'a BTreeMap<K, V>] {
     type Key = &'a K;
     type Iter = Keys<'a, K, V>;
     fn intersection(self) -> Intersection<&'a K, Keys<'a, K, V>> {
