@@ -358,6 +358,7 @@ mod test {
         }
     }
 
+    // TODO(tjk): Add more phrase query tests
     #[test]
     fn test_phrase() {
         let mut index = InvertedIndex::new();
@@ -365,5 +366,13 @@ mod test {
         index.index(doc1.clone());
         println!("{:?}", index.phrase("learn to program"));
         println!("{:?}", index.phrase("learn to pro"));
+    }
+
+    #[test]
+    fn test_phrase2() {
+        let mut index = InvertedIndex::new();
+        let doc1 = Document::new("1", "is is is");
+        index.index(doc1.clone());
+        println!("{:?}", index.phrase("i i"));
     }
 }
