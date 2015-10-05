@@ -76,15 +76,17 @@ impl InvertedIndex {
     fn phrase(&self, phrase: &str) -> PostingsMap {
         let terms: Vec<_> = analyze_query(phrase).collect();
         let postings: Vec<_> = terms.windows(2)
-            .map(|adjacent_terms| {
-            let term0 = &adjacent_terms[0];
-            let term1 = &adjacent_terms[1];
-            if let (Some(posting0), Some(posting1)) = (self.index.get(term0), self.index.get(term1)) {
-                posting0.intersect_positionally(posting1)
-            } else {
-                PostingsMap::new()
-            }
-        }).collect();
+                                    .map(|adjacent_terms| {
+                                        let term0 = &adjacent_terms[0];
+                                        let term1 = &adjacent_terms[1];
+                                        if let (Some(posting0), Some(posting1)) =
+                                               (self.index.get(term0), self.index.get(term1)) {
+                                            posting0.intersect_positionally(posting1)
+                                        } else {
+                                            PostingsMap::new()
+                                        }
+                                    })
+                                    .collect();
         postings.intersect_postings()
     }
 
@@ -96,7 +98,7 @@ impl InvertedIndex {
                 postings.intersect_postings()
             }
             Or(queries) => queries.into_iter().map(|q| self.query_rec(q)).merge_postings(),
-            Phrase(phrase) => self.phrase(phrase)
+            Phrase(phrase) => self.phrase(phrase),
         }
     }
 

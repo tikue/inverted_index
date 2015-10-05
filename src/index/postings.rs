@@ -143,7 +143,8 @@ impl PositionalIntersect for PostingsMap {
         let maps = &[self, other];
         maps.intersection()
             .map(|doc_id| {
-                (doc_id.clone(), positional_intersect(&self[doc_id], &other[doc_id]))
+                (doc_id.clone(),
+                 positional_intersect(&self[doc_id], &other[doc_id]))
             })
             .collect()
     }
