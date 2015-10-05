@@ -1,7 +1,7 @@
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 use std::hash::Hasher;
 use std::iter;
-use std::str::CharIndices;
+use std::str::{CharIndices, SplitWhitespace};
 use std::ops;
 
 use itertools::{GroupBy, Itertools};
@@ -70,14 +70,11 @@ impl InvertedIndex {
     }
 
     fn postings(&self, query: &str) -> PostingsMap {
-        // TODO(tjk): split this out into `fn analyze(query: &str) -> Iterator<String>`
-        let unique_terms: HashSet<_> = query.split_whitespace().map(str::to_lowercase).collect();
-        unique_terms.into_iter().flat_map(|word| self.index.get(&word)).merge_postings()
+        analyze_query(query).unique().flat_map(|word| self.index.get(&word)).merge_postings()
     }
 
     fn phrase(&self, phrase: &str) -> PostingsMap {
-        // TODO(tjk): split this out into `fn analyze(query: &str) -> Iterator<String>`
-        let terms: Vec<_> = phrase.split_whitespace().map(str::to_lowercase).collect();
+        let terms: Vec<_> = analyze_query(phrase).collect();
         let postings: Vec<_> = terms.windows(2)
             .map(|adjacent_terms| {
             let term0 = &adjacent_terms[0];
@@ -121,6 +118,12 @@ type Tokens<'a> = iter::FlatMap<
                         fn(&(bool, Vec<(usize, char)>)) -> bool>>,
                 iter::Map<ops::Range<usize>, Ngrams>,
                 fn((usize, (bool, Vec<(usize, char)>))) -> iter::Map<ops::Range<usize>, Ngrams>>;
+
+type QueryTokens<'a> = iter::Map<SplitWhitespace<'a>, fn(&str) -> String>;
+
+fn analyze_query(query: &str) -> QueryTokens {
+    query.split_whitespace().map(str::to_lowercase)
+}
 
 fn analyze_doc(doc: &str) -> Tokens {
     doc.char_indices()
