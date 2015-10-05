@@ -15,4 +15,8 @@ pub enum Query<'a> {
     /// A query requesting the union of the documents returned
     /// in each sub-query
     Or(&'a [Query<'a>]),
+
+    /// An exact-match query. The given phrase must appear in all documents returned.
+    /// False positives aren't guaranteed to not occur.
+    Phrase(&'a str),
 }

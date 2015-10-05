@@ -1,4 +1,5 @@
-#![feature(unboxed_closures, core, iter_arith, custom_attribute, slice_patterns)]
+#![feature(plugin, unboxed_closures, core, iter_arith, custom_attribute, slice_patterns)]
+#![plugin(clippy)]
 #![deny(missing_docs)]
 
 //! This crate contains tools for creating and working with the InvertedIndex struct.

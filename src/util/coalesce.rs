@@ -7,15 +7,31 @@ pub trait Merge: Ord + Copy {
 /// Enables the ability to coalesce items in a collection
 /// Coalescence occurs when two items in the collection are merged
 /// in lieu of inserting a new item
-pub trait Coalesce<T: Ord + Copy + Merge> {
+pub trait Coalesce {
+    /// The type of element that can be coalesced.
+    type Element: Ord + Copy + Merge;
+
     /// Inserts or merges, if possible, the item into the collection at the given index.
-    fn coalesce(&mut self, index: usize, el: T); 
+    fn coalesce(&mut self, index: usize, el: Self::Element);
     /// Searches for the index to insert the element in order, then coalesces at the found index;
-    fn search_coalesce(&mut self, start: usize, el: T) -> usize;
+    fn search_coalesce(&mut self, start: usize, el: Self::Element) -> usize;
+
+    /// Inserts, in order, the elements of an ordered iterable into self.
+    /// Duplicate elements are not inserted.
+    fn merge_coalesce<Iter>(&mut self, iter: Iter)
+        where Iter: IntoIterator<Item = Self::Element>
+    {
+        let mut idx = 0;
+        for element in iter {
+            idx = self.search_coalesce(idx, element);
+        }
+    }
 }
 
-impl<T: Ord + Copy + Merge> Coalesce<T> for Vec<T> {
-    fn coalesce(&mut self, index: usize, el: T)  {
+impl<T: Ord + Copy + Merge> Coalesce for Vec<T> {
+    type Element = T;
+
+    fn coalesce(&mut self, index: usize, el: T) {
         let merge = T::merge;
         if self.is_empty() {
             self.insert(index, el);
@@ -48,8 +64,9 @@ impl<T: Ord + Copy + Merge> Coalesce<T> for Vec<T> {
 
     fn search_coalesce(&mut self, start: usize, el: T) -> usize {
         match self[start..].binary_search(&el) {
-            Ok(idx) => idx,
+            Ok(idx) => start + idx,
             Err(idx) => {
+                let idx = start + idx;
                 self.coalesce(idx, el);
                 idx
             }
@@ -60,10 +77,11 @@ impl<T: Ord + Copy + Merge> Coalesce<T> for Vec<T> {
 macro_rules! impl_merge_tuples {
     ($tp:ident) => (
         impl Merge for ($tp, $tp) {
-            fn merge(self, (x2, y2): ($tp, $tp))  -> Option<($tp, $tp)> {
-                let (x1, y1) = self;
-                if y1 >= x2 {
-                    if y1 < y2 { Some((x1, y2)) } else { Some((x1, y1)) }
+            fn merge(self, (begin2, end2): ($tp, $tp))  -> Option<($tp, $tp)> {
+                let (begin1, end1) = self;
+                assert!(begin2 >= begin1, "Input's begin must be >= self's begin");
+                if end1 >= begin2 {
+                    Some(if end1 < end2 { (begin1, end2) } else { (begin1, end1) })
                 } else {
                     None
                 }
@@ -140,4 +158,17 @@ fn test_coalesce_subrange() {
     let mut v = vec![(0, 3)];
     v.coalesce(1, (1, 2));
     assert_eq!(v, [(0, 3)]);
+}
+
+#[test]
+fn test_search_coalesce() {
+    let mut v = vec![(0, 1), (2, 3), (4, 5), (6, 7)];
+    assert_eq!(2, v.search_coalesce(1, (4, 5)));
+}
+
+#[test]
+fn test_search_coalesce_2() {
+    let mut v = vec![(0, 1), (2, 3), (4, 5), (6, 7)];
+    assert_eq!(3, v.search_coalesce(1, (5, 6)));
+    assert_eq!(v, [(0, 1), (2, 3), (4, 7)]);
 }
