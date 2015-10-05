@@ -29,8 +29,10 @@ impl InvertedIndex {
         }
     }
 
-    /// A basic implementation of index, splits the document's content into whitespace-separated
-    /// words, and inserts each word-document pair into the map.
+    /// Inserts the document.
+    /// Insertings a document involves tokenizing the document's content
+    /// and inserting each token into the index, pointing to the document and its position in the
+    /// document.
     pub fn index(&mut self, doc: Document) {
         let previous_version = self.docs.insert(doc.id.clone(), doc.clone());
         if let Some(previous_version) = previous_version {
