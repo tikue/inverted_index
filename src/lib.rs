@@ -9,6 +9,7 @@
 //! 
 //! ## Indexing
 //! ```
+//! use inverted_index::{Document, InvertedIndex};
 //! let mut index = InvertedIndex::new();
 //! index.index(Document::new("1", "learn to program in rust today"));
 //! ```
@@ -23,6 +24,9 @@
 //! 
 //! ## Searching
 //! ```
+//! use inverted_index::{Document, InvertedIndex};
+//! let mut index = InvertedIndex::new();
+//! index.index(Document::new("1", "learn to program in rust today"));
 //! let results = index.search("prog");
 //! ```
 //! 
@@ -53,7 +57,12 @@
 //! method defined on the `SearchResult` struct to highlight the matching content. It accepts 
 //! `before` and `after` string arguments to wrap the matching sections of the document in 
 //! highlights.
+//!
 //! ```
+//! use inverted_index::{Document, InvertedIndex};
+//! let mut index = InvertedIndex::new();
+//! index.index(Document::new("1", "learn to program in rust today"));
+//! let results = index.search("prog");
 //! for search_result in &results {
 //!     println!("{:?}", search_result.highlight("<b>", "</b>"));
 //! }
