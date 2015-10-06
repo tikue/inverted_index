@@ -1,6 +1,6 @@
 # inverted_index
-This library provides an `InvertedIndex` that indexes documents and makes them searchable.
-Below are a few example usages. For more examples, see the tests.
+This library provides an in-memory (subject to change) `InvertedIndex` that indexes documents to 
+make them searchable.  Below are a few example usages. For more examples, see the tests.
 
 ## Indexing
 ```
@@ -8,10 +8,18 @@ let mut index = InvertedIndex::new();
 index.index(Document::new("1", "learn to program in rust today"));
 ```
 
+Indexing is the process of inserting a document into the `InvertedIndex` to make it searchable.
+The general process is:
+
+1. Tokenize the document's text, typically by splitting the text on word boundaries.
+2. Insert each token into the index with the original document as its payload.
+3. Optionally store additional metadata along with each document, such as positional information.
+
 ## Searching
 ```
 let results = index.search("prog");
 ```
+
 Searches returns a set of search results. Each search result consists of a matching document, the
 positions within the document that matched the query, and the document's search score.
 
@@ -28,10 +36,10 @@ has four variants:
               are returned for any of the sub-queries.
 
 ## Scoring
-The order in which search results are returned is based on relevance. Currently, relevance for each
-document is computed based on the length of matching content divided by the square root of the
-document length. This helps to ensure that longer documents don't receive too unfair of an
-advantage over shorter documents.
+The returned search results are ordered based on document relevance to the search query, sorted
+descending. Currently, relevance for each document is computed based on the length of matching 
+content divided by the square root of the document length. This helps to ensure that longer 
+documents don't receive too unfair of an advantage over shorter documents.
 
 ## Highlighting
 Search results include the positions in the document that matched the query. There is a helper

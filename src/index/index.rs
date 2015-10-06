@@ -29,8 +29,10 @@ impl InvertedIndex {
         }
     }
 
-    /// A basic implementation of index, splits the document's content into whitespace-separated
-    /// words, and inserts each word-document pair into the map.
+    /// Inserts the document.
+    /// Insertings a document involves tokenizing the document's content
+    /// and inserting each token into the index, pointing to the document and its position in the
+    /// document.
     pub fn index(&mut self, doc: Document) {
         let previous_version = self.docs.insert(doc.id.clone(), doc.clone());
         if let Some(previous_version) = previous_version {
@@ -187,8 +189,11 @@ impl FnOnce<(usize,)> for Ngrams {
 
 #[cfg(test)]
 mod test {
-    use super::super::*;
-    use Query::{And, Match, Or};
+    use Query::*;
+    use Document;
+    use InvertedIndex;
+    use Position;
+    use SearchResult;
     use std::collections::BTreeMap;
 
     #[test]
@@ -358,14 +363,29 @@ mod test {
         }
     }
 
-    // TODO(tjk): Add more phrase query tests
     #[test]
     fn test_phrase() {
         let mut index = InvertedIndex::new();
         let doc1 = Document::new("1", "learn to program in rust today");
         index.index(doc1.clone());
-        println!("{:?}", index.phrase("learn to program"));
-        println!("{:?}", index.phrase("learn to pro"));
+        let search_results = index.query(&Phrase("learn to program"));
+        let expected: BTreeMap<_, _> = [(doc1.clone(), vec![Position::new((0, 5), 0),
+                                                    Position::new((6, 8), 1),
+                                                    Position::new((9, 16), 2)])]
+                                            .iter().cloned().collect();
+        assert_eq!(search_results.len(), expected.len());
+        for search_result in &search_results {
+            assert_eq!(&search_result.positions, &expected[search_result.doc]);
+        }
+        let search_results = index.query(&Phrase("lear t pro"));
+        let expected: BTreeMap<_, _> = [(doc1, vec![Position::new((0, 4), 0),
+                                                    Position::new((6, 7), 1),
+                                                    Position::new((9, 12), 2)])]
+                                            .iter().cloned().collect();
+        assert_eq!(search_results.len(), expected.len());
+        for search_result in &search_results {
+            assert_eq!(&search_result.positions, &expected[search_result.doc]);
+        }
     }
 
     #[test]
@@ -373,6 +393,14 @@ mod test {
         let mut index = InvertedIndex::new();
         let doc1 = Document::new("1", "is is is");
         index.index(doc1.clone());
-        println!("{:?}", index.phrase("i i"));
+        let expected: BTreeMap<_, _> = [(doc1.clone(), vec![Position::new((0, 1), 0),
+                                                            Position::new((3, 4), 1),
+                                                            Position::new((6, 7), 2)])]
+                                            .iter().cloned().collect();
+        let search_results = index.query(&Phrase("i i"));
+        assert_eq!(search_results.len(), expected.len());
+        for search_result in &search_results {
+            assert_eq!(&search_result.positions, &expected[search_result.doc]);
+        }
     }
 }
