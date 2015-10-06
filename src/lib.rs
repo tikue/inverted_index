@@ -65,7 +65,15 @@ extern crate core;
 
 /// Contains utility methods used in the rest of the crate.
 pub mod util;
-/// Contains the core primitives for use with InvertedIndex.
-pub mod index;
 
-pub use index::*;
+mod document;
+mod index;
+mod postings;
+mod query;
+mod search_result;
+
+pub use index::InvertedIndex;
+pub use document::Document;
+pub use search_result::SearchResult;
+pub use postings::{PostingsMap, PostingsMerge, PostingsIntersect, PositionalIntersect, Position};
+pub use query::Query;
