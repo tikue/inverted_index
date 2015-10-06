@@ -12,7 +12,7 @@ use util::*;
 
 /// A basic implementation of an `Index`, the inverted index is a data structure that maps
 /// from words to postings.
-#[derive(Debug)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, RustcEncodable, RustcDecodable)]
 pub struct InvertedIndex {
     // Maps terms to their postings
     index: BTreeMap<String, PostingsMap>,
