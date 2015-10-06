@@ -12,7 +12,7 @@ use util::*;
 
 /// A basic implementation of an `Index`, the inverted index is a data structure that maps
 /// from words to postings.
-#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, RustcEncodable, RustcDecodable)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, RustcEncodable, RustcDecodable)]
 pub struct InvertedIndex {
     // Maps terms to their postings
     index: BTreeMap<String, PostingsMap>,
@@ -204,21 +204,21 @@ mod test {
         index.index(doc1.clone());
         index.index(doc2.clone());
         let search_results = index.search("to");
-        let expected: BTreeMap<_, _> = [(doc1.clone(), vec![Position::new((6, 8), 1),
-                                                            Position::new((25, 27), 5)]),
-                                        (doc2, vec![Position::new((13, 15), 3)])]
+        let expected: BTreeMap<_, _> = [(doc1.id.clone(), vec![Position::new((6, 8), 1),
+                                                               Position::new((25, 27), 5)]),
+                                        (doc2.id.clone(), vec![Position::new((13, 15), 3)])]
                                            .iter()
                                            .cloned()
                                            .collect();
         assert_eq!(search_results.len(), expected.len());
         for search_result in &search_results {
             assert_eq!(&search_result.positions,
-                       &expected[search_result.doc])
+                       &expected[&*search_result.doc.id])
         }
         assert_eq!("learn <span class=highlight>to</span> program in rust <span \
                     class=highlight>to</span>day",
                    search_results.iter()
-                                 .find(|search_result| search_result.doc == &doc1)
+                                 .find(|search_result| search_result.doc.id == doc1.id)
                                  .unwrap()
                                  .highlight("<span class=highlight>", "</span>"));
 
@@ -270,7 +270,7 @@ mod test {
         let search_results = index.search("be");
         assert_eq!(index.docs.len(), 2);
         // "beat" should be first, since it's a closer match
-        assert_eq!(search_results[0].doc, &doc);
+        assert_eq!(search_results[0].doc.id, doc.id);
     }
 
     #[test]
@@ -349,17 +349,17 @@ mod test {
         index.index(doc3.clone());
         let search_results = index.query(&Or(&[Match("you"),
                                                And(&[Match("today"), Match("you")])]));
-        let expected: BTreeMap<_, _> = [(doc2,
+        let expected: BTreeMap<_, _> = [(doc2.id,
                                          vec![Position::new((9, 12), 2),
                                               Position::new((13, 18), 3)]),
-                                        (doc3, vec![Position::new((9, 12), 2)])]
+                                        (doc3.id, vec![Position::new((9, 12), 2)])]
                                            .iter()
                                            .cloned()
                                            .collect();
         assert_eq!(search_results.len(), expected.len());
         for search_result in &search_results {
             assert_eq!(&search_result.positions,
-                       &expected[search_result.doc])
+                       &expected[&*search_result.doc.id])
         }
     }
 
@@ -369,22 +369,22 @@ mod test {
         let doc1 = Document::new("1", "learn to program in rust today");
         index.index(doc1.clone());
         let search_results = index.query(&Phrase("learn to program"));
-        let expected: BTreeMap<_, _> = [(doc1.clone(), vec![Position::new((0, 5), 0),
+        let expected: BTreeMap<_, _> = [(doc1.id.clone(), vec![Position::new((0, 5), 0),
                                                     Position::new((6, 8), 1),
                                                     Position::new((9, 16), 2)])]
                                             .iter().cloned().collect();
         assert_eq!(search_results.len(), expected.len());
         for search_result in &search_results {
-            assert_eq!(&search_result.positions, &expected[search_result.doc]);
+            assert_eq!(&search_result.positions, &expected[&*search_result.doc.id]);
         }
         let search_results = index.query(&Phrase("lear t pro"));
-        let expected: BTreeMap<_, _> = [(doc1, vec![Position::new((0, 4), 0),
+        let expected: BTreeMap<_, _> = [(doc1.id, vec![Position::new((0, 4), 0),
                                                     Position::new((6, 7), 1),
                                                     Position::new((9, 12), 2)])]
                                             .iter().cloned().collect();
         assert_eq!(search_results.len(), expected.len());
         for search_result in &search_results {
-            assert_eq!(&search_result.positions, &expected[search_result.doc]);
+            assert_eq!(&search_result.positions, &expected[&*search_result.doc.id]);
         }
     }
 
@@ -393,14 +393,14 @@ mod test {
         let mut index = InvertedIndex::new();
         let doc1 = Document::new("1", "is is is");
         index.index(doc1.clone());
-        let expected: BTreeMap<_, _> = [(doc1.clone(), vec![Position::new((0, 1), 0),
+        let expected: BTreeMap<_, _> = [(doc1.id.clone(), vec![Position::new((0, 1), 0),
                                                             Position::new((3, 4), 1),
                                                             Position::new((6, 7), 2)])]
                                             .iter().cloned().collect();
         let search_results = index.query(&Phrase("i i"));
         assert_eq!(search_results.len(), expected.len());
         for search_result in &search_results {
-            assert_eq!(&search_result.positions, &expected[search_result.doc]);
+            assert_eq!(&search_result.positions, &expected[&*search_result.doc.id]);
         }
     }
 }

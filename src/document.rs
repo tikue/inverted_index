@@ -1,8 +1,5 @@
-use std::hash::{Hash, Hasher};
-
 /// A Document contains an id and content.
-/// Hashing and equality are based only on the id field.
-#[derive(Clone, Debug, Eq, Ord, RustcEncodable, RustcDecodable)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash, RustcEncodable, RustcDecodable)]
 pub struct Document {
     /// The id of the document
     pub id: String,
@@ -31,27 +28,5 @@ impl Document {
     /// Returns a reference to the document's content
     pub fn content(&self) -> &str {
         &self.content
-    }
-}
-
-impl Hash for Document {
-    // Documents are unique only upon their id
-    fn hash<H>(&self, state: &mut H)
-        where H: Hasher
-    {
-        self.id.hash(state);
-    }
-}
-
-impl PartialEq for Document {
-    // Documents are unique only upon their id
-    fn eq(&self, other: &Document) -> bool {
-        self.id == other.id
-    }
-}
-
-impl PartialOrd for Document {
-    fn partial_cmp(&self, other: &Document) -> Option<::std::cmp::Ordering> {
-        self.id.partial_cmp(&other.id)
     }
 }

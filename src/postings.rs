@@ -6,7 +6,7 @@ use std::collections::btree_map::Entry::*;
 use util::*;
 
 /// Information about the position of a single term within a document
-#[derive(Copy, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, RustcDecodable, RustcEncodable)]
+#[derive(Copy, Clone, Debug, Hash, Eq, Ord, PartialEq, PartialOrd, RustcDecodable, RustcEncodable)]
 pub struct Position {
     /// Pair of byte indexes into the document at the beginning (inclusive) and end (exclusive) of 
     /// the term.
