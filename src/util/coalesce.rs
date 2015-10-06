@@ -55,7 +55,7 @@ impl<T: Ord + Copy + Merge> Coalesce for Vec<T> {
                     self.remove(index);
                 }
             } else if let Some(coalesced) = merge(el, self[index]) {
-                self[index ] = coalesced;
+                self[index] = coalesced;
             } else {
                 self.insert(index, el);
             }

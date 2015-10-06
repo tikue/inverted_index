@@ -369,22 +369,30 @@ mod test {
         let doc1 = Document::new("1", "learn to program in rust today");
         index.index(doc1.clone());
         let search_results = index.query(&Phrase("learn to program"));
-        let expected: BTreeMap<_, _> = [(doc1.id.clone(), vec![Position::new((0, 5), 0),
-                                                    Position::new((6, 8), 1),
-                                                    Position::new((9, 16), 2)])]
-                                            .iter().cloned().collect();
+        let expected: BTreeMap<_, _> = [(doc1.id.clone(),
+                                         vec![Position::new((0, 5), 0),
+                                              Position::new((6, 8), 1),
+                                              Position::new((9, 16), 2)])]
+                                           .iter()
+                                           .cloned()
+                                           .collect();
         assert_eq!(search_results.len(), expected.len());
         for search_result in &search_results {
-            assert_eq!(&search_result.positions, &expected[&*search_result.doc.id]);
+            assert_eq!(&search_result.positions,
+                       &expected[&*search_result.doc.id]);
         }
         let search_results = index.query(&Phrase("lear t pro"));
-        let expected: BTreeMap<_, _> = [(doc1.id, vec![Position::new((0, 4), 0),
-                                                    Position::new((6, 7), 1),
-                                                    Position::new((9, 12), 2)])]
-                                            .iter().cloned().collect();
+        let expected: BTreeMap<_, _> = [(doc1.id,
+                                         vec![Position::new((0, 4), 0),
+                                              Position::new((6, 7), 1),
+                                              Position::new((9, 12), 2)])]
+                                           .iter()
+                                           .cloned()
+                                           .collect();
         assert_eq!(search_results.len(), expected.len());
         for search_result in &search_results {
-            assert_eq!(&search_result.positions, &expected[&*search_result.doc.id]);
+            assert_eq!(&search_result.positions,
+                       &expected[&*search_result.doc.id]);
         }
     }
 
@@ -393,14 +401,18 @@ mod test {
         let mut index = InvertedIndex::new();
         let doc1 = Document::new("1", "is is is");
         index.index(doc1.clone());
-        let expected: BTreeMap<_, _> = [(doc1.id.clone(), vec![Position::new((0, 1), 0),
-                                                            Position::new((3, 4), 1),
-                                                            Position::new((6, 7), 2)])]
-                                            .iter().cloned().collect();
+        let expected: BTreeMap<_, _> = [(doc1.id.clone(),
+                                         vec![Position::new((0, 1), 0),
+                                              Position::new((3, 4), 1),
+                                              Position::new((6, 7), 2)])]
+                                           .iter()
+                                           .cloned()
+                                           .collect();
         let search_results = index.query(&Phrase("i i"));
         assert_eq!(search_results.len(), expected.len());
         for search_result in &search_results {
-            assert_eq!(&search_result.positions, &expected[&*search_result.doc.id]);
+            assert_eq!(&search_result.positions,
+                       &expected[&*search_result.doc.id]);
         }
     }
 }

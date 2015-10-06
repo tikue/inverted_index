@@ -19,8 +19,9 @@ impl<'a> SearchResult<'a> {
     pub fn new(doc: &'a Document, positions: Vec<Position>) -> SearchResult<'a> {
         SearchResult {
             score: positions.iter()
-                .map(|&Position{offsets:(begin, end), ..}| end - begin)
-                .sum::<usize>() as f32 / (doc.content().len() as f32).sqrt(),
+                            .map(|&Position { offsets: (begin, end), .. }| end - begin)
+                            .sum::<usize>() as f32 /
+                   (doc.content().len() as f32).sqrt(),
             doc: doc,
             positions: positions,
         }
