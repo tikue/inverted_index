@@ -40,12 +40,12 @@ impl Merge for Position {
 /// Each document is assigned a unique string id.
 pub type DocId = String;
 
-/// A Postings map (doc id => positions) for a single term.
+/// A postings map (doc id => positions) for a single term.
 /// Records which Documents contain the term, and at which locations in the documents.
 pub type PostingsMap = BTreeMap<DocId, Vec<Position>>;
 
-/// An extension trait for iterables over PostingsMaps
-/// that enables the computation of the union of Postingsmaps
+/// An extension trait for iterables over `PostingsMap`s
+/// that enables computing their union.
 pub trait PostingsMerge {
     /// Computes the map containing the union of the maps in self
     fn merge_postings(self) -> PostingsMap;
@@ -71,9 +71,8 @@ impl<'a, Iter> PostingsMerge for Iter
     }
 }
 
-/// An extension trait for slices of PostingsMaps,
-/// that enables the computation of the intersection
-/// of PostingsMaps
+/// An extension trait for slices of `PostingsMap`s
+/// that enables computing their intersection.
 pub trait PostingsIntersect {
     /// Computes the map containing the intersection of the the maps in self
     fn intersect_postings(self) -> PostingsMap;
