@@ -98,52 +98,64 @@ impl<'a> PostingsIntersect for &'a [PostingsMap] {
     }
 }
 
-/// An extension trait for PostingsMaps which is useful in phrase query intersections.
+/// An extension trait for positionally intersecting two types. A positional intersection is
+/// broadly defined as an intersection in which each element returned is close to an element
+/// not in its own set.
 pub trait PositionalIntersect {
-    /// Intersect two postings maps positionally, returning a PostingsMap containing postings lists
+    /// The return type of the positional intersection. Typically this will be the same type
+    /// as the inputs, but for some cases it needs to be different, e.g. when the inputs are slices
+    /// then the output will be an owned vec.
+    type Intersection;
+
+    /// Intersect positionally, returning an Intersection
     /// whose terms are present at position X in self's postings list for document D
-    /// and position X + 1 in the input's postings list for document D.
-    fn intersect_positionally(&self, &Self) -> PostingsMap;
+    /// and position X + delta (for some delta) in the input's postings list for document D.
+    fn intersect_positionally(&self, &Self) -> Self::Intersection;
+}
+
+impl PositionalIntersect for [Position] {
+    type Intersection = Vec<Position>;
+
+    fn intersect_positionally(&self, other: &[Position]) -> Vec<Position> {
+        let mut intersection = vec![];
+        let mut this = self.iter().cloned();
+        let mut other = other.iter().cloned();
+        let mut lval = this.next();
+        let mut rval = other.next();
+        loop {
+            if let (Some(l), Some(r)) = (lval, rval) {
+                match l.position.cmp(&r.position) {
+                    Ordering::Less => {
+                        if l.position + 1 == r.position {
+                            if !intersection.is_empty() {
+                                if intersection[intersection.len() - 1] != l {
+                                    intersection.push(l);
+                                }
+                            } else {
+                                intersection.push(l);
+                            }
+                            intersection.push(r);
+                            rval = other.next();
+                        }
+                        lval = this.next();
+                    }
+                    Ordering::Greater | Ordering::Equal => rval = other.next(),
+                }
+            } else {
+                return intersection;
+            }
+        }
+    }
 }
 
 impl PositionalIntersect for PostingsMap {
+    type Intersection = PostingsMap;
     fn intersect_positionally(&self, other: &Self) -> PostingsMap {
-        fn positional_intersect(left: &[Position], right: &[Position]) -> Vec<Position> {
-            let mut intersection = vec![];
-            let mut left = left.iter().cloned();
-            let mut right = right.iter().cloned();
-            let mut lval = left.next();
-            let mut rval = right.next();
-            loop {
-                if let (Some(l), Some(r)) = (lval, rval) {
-                    match l.position.cmp(&r.position) {
-                        Ordering::Less => {
-                            if l.position + 1 == r.position {
-                                if !intersection.is_empty() {
-                                    if intersection[intersection.len() - 1] != l {
-                                        intersection.push(l);
-                                    }
-                                } else {
-                                    intersection.push(l);
-                                }
-                                intersection.push(r);
-                                rval = right.next();
-                            }
-                            lval = left.next();
-                        }
-                        Ordering::Greater | Ordering::Equal => rval = right.next(),
-                    }
-                } else {
-                    return intersection;
-                }
-            }
-        }
-
         let maps = &[self, other];
         maps.intersection()
             .map(|doc_id| {
                 (doc_id.clone(),
-                 positional_intersect(&self[doc_id], &other[doc_id]))
+                 self[doc_id].intersect_positionally(&other[doc_id]))
             })
             .collect()
     }
