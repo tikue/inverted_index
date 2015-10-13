@@ -1,3 +1,5 @@
+use std::char;
+use std::collections::Bound::{Included, Excluded};
 use std::collections::BTreeMap;
 use std::hash::Hasher;
 use std::iter;
@@ -92,6 +94,14 @@ impl InvertedIndex {
         postings.intersect_postings()
     }
 
+    fn prefix(&self, prefix: &str) -> PostingsMap {
+        let min = Included(prefix);
+        let mut max: String = prefix.into();
+        max.push(char::MAX);
+        let max = Excluded(&max);
+        self.index.range(min, max).map(|(_k, v)| v).merge_postings()
+    }
+
     fn query_rec(&self, query: &Query) -> PostingsMap {
         match *query {
             Match(query) => self.postings(query),
@@ -101,6 +111,7 @@ impl InvertedIndex {
             }
             Or(queries) => queries.into_iter().map(|q| self.query_rec(q)).merge_postings(),
             Phrase(phrase) => self.phrase(phrase),
+            Prefix(prefix) => self.prefix(prefix),
         }
     }
 
@@ -409,6 +420,26 @@ mod test {
                                            .cloned()
                                            .collect();
         let search_results = index.query(&Phrase("i i"));
+        assert_eq!(search_results.len(), expected.len());
+        for search_result in &search_results {
+            assert_eq!(&search_result.positions,
+                       &expected[&*search_result.doc.id]);
+        }
+    }
+
+    #[test]
+    fn test_prefix() {
+        let mut index = InvertedIndex::new();
+        let doc1 = Document::new("1", "is is is");
+        index.index(doc1.clone());
+        let expected: BTreeMap<_, _> = [(doc1.id.clone(),
+                                         vec![Position::new((0, 2), 0),
+                                              Position::new((3, 5), 1),
+                                              Position::new((6, 8), 2)])]
+                                           .iter()
+                                           .cloned()
+                                           .collect();
+        let search_results = index.query(&Prefix("i"));
         assert_eq!(search_results.len(), expected.len());
         for search_result in &search_results {
             assert_eq!(&search_result.positions,

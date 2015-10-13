@@ -1,4 +1,4 @@
-#![feature(plugin, unboxed_closures, core, iter_arith, custom_attribute, slice_patterns)]
+#![feature(plugin, unboxed_closures, core, iter_arith, custom_attribute, slice_patterns, collections_bound, btree_range)]
 #![plugin(clippy)]
 #![deny(missing_docs)]
 
