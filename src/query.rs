@@ -11,7 +11,6 @@ pub enum Query<'a> {
     /// returned in each sub-query
     And(&'a [Query<'a>]),
 
-
     /// A query requesting the union of the documents returned
     /// in each sub-query
     Or(&'a [Query<'a>]),

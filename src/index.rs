@@ -215,16 +215,16 @@ mod test {
         index.index(doc1.clone());
         index.index(doc2.clone());
         let search_results = index.search("to");
-        let expected: BTreeMap<_, _> = [(doc1.id.clone(), vec![Position::new((6, 8), 1),
-                                                               Position::new((25, 27), 5)]),
-                                        (doc2.id.clone(), vec![Position::new((13, 15), 3)])]
-                                           .iter()
-                                           .cloned()
-                                           .collect();
+        let expected: BTreeMap<_, _> =
+            [(doc1.id.clone(),
+              vec![Position::new((6, 8), 1), Position::new((25, 27), 5)]),
+             (doc2.id.clone(), vec![Position::new((13, 15), 3)])]
+                .iter()
+                .cloned()
+                .collect();
         assert_eq!(search_results.len(), expected.len());
         for search_result in &search_results {
-            assert_eq!(&search_result.positions,
-                       &expected[&*search_result.doc.id])
+            assert_eq!(&search_result.positions, &expected[&*search_result.doc.id])
         }
         assert_eq!("learn <span class=highlight>to</span> program in rust <span \
                     class=highlight>to</span>day",
@@ -300,8 +300,7 @@ mod test {
         index.index(doc.clone());
         let search_results = index.search("be b");
         assert_eq!(search_results.len(), 1);
-        assert_eq!(search_results[0].positions,
-                   vec![Position::new((0, 2), 0)]);
+        assert_eq!(search_results[0].positions, vec![Position::new((0, 2), 0)]);
     }
 
     #[test]
@@ -311,8 +310,7 @@ mod test {
         index.index(doc.clone());
         let search_results = index.search("bE");
         assert_eq!(search_results.len(), 1);
-        assert_eq!(search_results[0].positions,
-                   vec![Position::new((0, 2), 0)]);
+        assert_eq!(search_results[0].positions, vec![Position::new((0, 2), 0)]);
     }
 
     #[test]
@@ -322,8 +320,7 @@ mod test {
         index.index(doc.clone());
         let search_results = index.search("be");
         assert_eq!(search_results.len(), 1);
-        assert_eq!(search_results[0].positions,
-                   vec![Position::new((0, 2), 0)]);
+        assert_eq!(search_results[0].positions, vec![Position::new((0, 2), 0)]);
     }
 
     #[test]
@@ -344,8 +341,7 @@ mod test {
                                            .collect();
         assert_eq!(search_results.len(), expected.len());
         for search_result in &search_results {
-            assert_eq!(&search_result.positions,
-                       &expected[search_result.doc])
+            assert_eq!(&search_result.positions, &expected[search_result.doc])
         }
     }
 
@@ -369,8 +365,7 @@ mod test {
                                            .collect();
         assert_eq!(search_results.len(), expected.len());
         for search_result in &search_results {
-            assert_eq!(&search_result.positions,
-                       &expected[&*search_result.doc.id])
+            assert_eq!(&search_result.positions, &expected[&*search_result.doc.id])
         }
     }
 
@@ -389,8 +384,7 @@ mod test {
                                            .collect();
         assert_eq!(search_results.len(), expected.len());
         for search_result in &search_results {
-            assert_eq!(&search_result.positions,
-                       &expected[&*search_result.doc.id]);
+            assert_eq!(&search_result.positions, &expected[&*search_result.doc.id]);
         }
         let search_results = index.query(&Phrase("lear t pro"));
         let expected: BTreeMap<_, _> = [(doc1.id,
@@ -402,8 +396,7 @@ mod test {
                                            .collect();
         assert_eq!(search_results.len(), expected.len());
         for search_result in &search_results {
-            assert_eq!(&search_result.positions,
-                       &expected[&*search_result.doc.id]);
+            assert_eq!(&search_result.positions, &expected[&*search_result.doc.id]);
         }
     }
 
@@ -422,8 +415,7 @@ mod test {
         let search_results = index.query(&Phrase("i i"));
         assert_eq!(search_results.len(), expected.len());
         for search_result in &search_results {
-            assert_eq!(&search_result.positions,
-                       &expected[&*search_result.doc.id]);
+            assert_eq!(&search_result.positions, &expected[&*search_result.doc.id]);
         }
     }
 
@@ -442,8 +434,7 @@ mod test {
         let search_results = index.query(&Prefix("i"));
         assert_eq!(search_results.len(), expected.len());
         for search_result in &search_results {
-            assert_eq!(&search_result.positions,
-                       &expected[&*search_result.doc.id]);
+            assert_eq!(&search_result.positions, &expected[&*search_result.doc.id]);
         }
     }
 }
