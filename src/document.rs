@@ -2,7 +2,7 @@
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash, RustcEncodable, RustcDecodable)]
 pub struct Document {
     /// The id of the document
-    pub id: String,
+    pub id: usize,
     /// The document's content
     pub content: String,
 }
@@ -10,19 +10,18 @@ pub struct Document {
 impl Document {
     /// Construct a new Document from an id and content.
     /// Both two arguments can be anything that can be turned into a String.
-    pub fn new<S, T>(id: S, content: T) -> Document
-        where S: Into<String>,
-              T: Into<String>
+    pub fn new<T>(id: usize, content: T) -> Document
+        where T: Into<String>
     {
         Document {
-            id: id.into(),
+            id: id,
             content: content.into(),
         }
     }
 
     /// Returns a reference to the document's id
-    pub fn id(&self) -> &str {
-        &self.id
+    pub fn id(&self) -> usize {
+        self.id
     }
 
     /// Returns a reference to the document's content
