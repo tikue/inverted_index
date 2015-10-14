@@ -37,12 +37,9 @@ impl Merge for Position {
     }
 }
 
-/// Each document is assigned a unique string id.
-pub type DocId = String;
-
 /// A postings map (doc id => positions) for a single term.
 /// Records which Documents contain the term, and at which locations in the documents.
-pub type PostingsMap = BTreeMap<DocId, Vec<Position>>;
+pub type PostingsMap = BTreeMap<usize, Vec<Position>>;
 
 /// An extension trait for iterables over `PostingsMap`s
 /// that enables computing their union.
@@ -169,18 +166,15 @@ mod test {
 
     #[test]
     fn test_merge() {
-        let postings = [iter::once(("1".into(),
-                                    vec![Position::new((0, 1), 0), Position::new((2, 3), 1)]))
+        let postings = [iter::once((1, vec![Position::new((0, 1), 0), Position::new((2, 3), 1)]))
                             .collect(),
-                        iter::once(("1".into(),
-                                    vec![Position::new((4, 5), 2), Position::new((6, 7), 3)]))
+                        iter::once((1, vec![Position::new((4, 5), 2), Position::new((6, 7), 3)]))
                             .collect()];
         assert_eq!(postings.iter().merge_postings(),
-                   iter::once(("1".into(),
-                               vec![Position::new((0, 1), 0),
-                                    Position::new((2, 3), 1),
-                                    Position::new((4, 5), 2),
-                                    Position::new((6, 7), 3)]))
+                   iter::once((1, vec![Position::new((0, 1), 0),
+                                       Position::new((2, 3), 1),
+                                       Position::new((4, 5), 2),
+                                       Position::new((6, 7), 3)]))
                        .collect());
     }
 }

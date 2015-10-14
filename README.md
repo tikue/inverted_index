@@ -6,7 +6,7 @@ the tests.
 ## Indexing
 ```
 let mut index = InvertedIndex::new();
-index.index(Document::new("1", "learn to program in rust today"));
+index.index(Document::new(1, "learn to program in rust today"));
 ```
 
 Indexing is the process of inserting a document into the `InvertedIndex` to make it searchable.

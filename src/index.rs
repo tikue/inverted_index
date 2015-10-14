@@ -13,12 +13,12 @@ use util::*;
 
 /// A basic implementation of an `Index`, the inverted index is a data structure that maps
 /// from words to postings.
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, RustcEncodable, RustcDecodable)]
+#[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, RustcEncodable, RustcDecodable)]
 pub struct InvertedIndex {
     // Maps terms to their postings
     index: BTreeMap<String, PostingsMap>,
     // Maps doc ids to their docs
-    docs: BTreeMap<String, Document>,
+    docs: BTreeMap<usize, Document>,
 }
 
 impl InvertedIndex {
@@ -35,7 +35,7 @@ impl InvertedIndex {
     /// and inserting each token into the index, pointing to the document and its position in the
     /// document.
     pub fn index(&mut self, doc: Document) {
-        let previous_version = self.docs.insert(doc.id.clone(), doc.clone());
+        let previous_version = self.docs.insert(doc.id, doc.clone());
         if let Some(previous_version) = previous_version {
             let previous_analyzed = analyze_doc(previous_version.content());
             for (ngram, _) in previous_analyzed {
@@ -55,7 +55,7 @@ impl InvertedIndex {
             self.index
                 .entry(ngram)
                 .or_insert_with(BTreeMap::new)
-                .entry(doc.id.clone())
+                .entry(doc.id)
                 .or_insert_with(Vec::new)
                 .search_coalesce(0, position);
         }
@@ -215,8 +215,8 @@ mod test {
     #[test]
     fn test_ngrams() {
         let mut index = InvertedIndex::new();
-        let doc1 = Document::new("1", "learn to program in rust today");
-        let doc2 = Document::new("2", "what did you today do");
+        let doc1 = Document::new(1, "learn to program in rust today");
+        let doc2 = Document::new(2, "what did you today do");
         index.index(doc1.clone());
         index.index(doc2.clone());
         let search_results = index.search("to");
@@ -229,7 +229,7 @@ mod test {
                 .collect();
         assert_eq!(search_results.len(), expected.len());
         for search_result in &search_results {
-            assert_eq!(&search_result.positions, &expected[&*search_result.doc.id])
+            assert_eq!(&search_result.positions, &expected[&search_result.doc.id])
         }
         assert_eq!("learn <span class=highlight>to</span> program in rust <span \
                     class=highlight>to</span>day",
@@ -243,8 +243,7 @@ mod test {
     #[test]
     fn test_highlight() {
         let mut index = InvertedIndex::new();
-        let doc1 = Document::new("2",
-                                 "Won\u{2019}t this split the ecosystem? Will everyone use?");
+        let doc1 = Document::new(2, "Won\u{2019}t this split the ecosystem? Will everyone use?");
         index.index(doc1.clone());
         let expected = "Won\u{2019}t this split the *e*cosystem? Will *e*veryone use?";
         let search_results = index.search("e");
@@ -255,7 +254,7 @@ mod test {
     #[test]
     fn test_unicode() {
         let mut index = InvertedIndex::new();
-        let doc = Document::new("0", "嗨, 您好");
+        let doc = Document::new(0, "嗨, 您好");
         index.index(doc.clone());
         let to_search = "您";
         let search_results = index.search(to_search);
@@ -267,9 +266,9 @@ mod test {
     #[test]
     fn test_update_doc() {
         let mut index = InvertedIndex::new();
-        let doc = Document::new("0", "abc åäö");
+        let doc = Document::new(0, "abc åäö");
         index.index(doc);
-        let doc = Document::new("0", "different");
+        let doc = Document::new(0, "different");
         index.index(doc);
         let search_results = index.search("å");
         assert!(search_results.is_empty());
@@ -279,9 +278,9 @@ mod test {
     #[test]
     fn test_ranking() {
         let mut index = InvertedIndex::new();
-        let doc = Document::new("0", "beat");
+        let doc = Document::new(0, "beat");
         index.index(doc.clone());
-        let doc2 = Document::new("1", "beast");
+        let doc2 = Document::new(1, "beast");
         index.index(doc2);
         let search_results = index.search("be");
         assert_eq!(index.docs.len(), 2);
@@ -292,7 +291,7 @@ mod test {
     #[test]
     fn test_duplicate_term() {
         let mut index = InvertedIndex::new();
-        let doc = Document::new("0", "beat");
+        let doc = Document::new(0, "beat");
         index.index(doc.clone());
         let search_results = index.search("be be");
         assert_eq!(search_results.len(), 1);
@@ -301,7 +300,7 @@ mod test {
     #[test]
     fn test_duplicate_term2() {
         let mut index = InvertedIndex::new();
-        let doc = Document::new("0", "beat");
+        let doc = Document::new(0, "beat");
         index.index(doc.clone());
         let search_results = index.search("be b");
         assert_eq!(search_results.len(), 1);
@@ -311,7 +310,7 @@ mod test {
     #[test]
     fn test_lowercase_search() {
         let mut index = InvertedIndex::new();
-        let doc = Document::new("0", "BeAt");
+        let doc = Document::new(0, "BeAt");
         index.index(doc.clone());
         let search_results = index.search("bE");
         assert_eq!(search_results.len(), 1);
@@ -321,7 +320,7 @@ mod test {
     #[test]
     fn test_lowercase_index() {
         let mut index = InvertedIndex::new();
-        let doc = Document::new("0", "BeAt");
+        let doc = Document::new(0, "BeAt");
         index.index(doc.clone());
         let search_results = index.search("be");
         assert_eq!(search_results.len(), 1);
@@ -331,9 +330,9 @@ mod test {
     #[test]
     fn test_and() {
         let mut index = InvertedIndex::new();
-        let doc1 = Document::new("1", "learn to program in rust today");
-        let doc2 = Document::new("2", "what did you today do");
-        let doc3 = Document::new("3", "what did you do yesterday");
+        let doc1 = Document::new(1, "learn to program in rust today");
+        let doc2 = Document::new(2, "what did you today do");
+        let doc3 = Document::new(3, "what did you do yesterday");
         index.index(doc1.clone());
         index.index(doc2.clone());
         index.index(doc3.clone());
@@ -353,9 +352,9 @@ mod test {
     #[test]
     fn test_and_or() {
         let mut index = InvertedIndex::new();
-        let doc1 = Document::new("1", "learn to program in rust today");
-        let doc2 = Document::new("2", "what did you today do");
-        let doc3 = Document::new("3", "what did you do yesterday");
+        let doc1 = Document::new(1, "learn to program in rust today");
+        let doc2 = Document::new(2, "what did you today do");
+        let doc3 = Document::new(3, "what did you do yesterday");
         index.index(doc1.clone());
         index.index(doc2.clone());
         index.index(doc3.clone());
@@ -370,14 +369,14 @@ mod test {
                                            .collect();
         assert_eq!(search_results.len(), expected.len());
         for search_result in &search_results {
-            assert_eq!(&search_result.positions, &expected[&*search_result.doc.id])
+            assert_eq!(&search_result.positions, &expected[&search_result.doc.id])
         }
     }
 
     #[test]
     fn test_phrase() {
         let mut index = InvertedIndex::new();
-        let doc1 = Document::new("1", "learn to program in rust today");
+        let doc1 = Document::new(1, "learn to program in rust today");
         index.index(doc1.clone());
         let search_results = index.query(&Phrase("learn to program"));
         let expected: BTreeMap<_, _> = [(doc1.id.clone(),
@@ -389,7 +388,7 @@ mod test {
                                            .collect();
         assert_eq!(search_results.len(), expected.len());
         for search_result in &search_results {
-            assert_eq!(&search_result.positions, &expected[&*search_result.doc.id]);
+            assert_eq!(&search_result.positions, &expected[&search_result.doc.id]);
         }
         let search_results = index.query(&Phrase("lear t pro"));
         let expected: BTreeMap<_, _> = [(doc1.id,
@@ -401,14 +400,14 @@ mod test {
                                            .collect();
         assert_eq!(search_results.len(), expected.len());
         for search_result in &search_results {
-            assert_eq!(&search_result.positions, &expected[&*search_result.doc.id]);
+            assert_eq!(&search_result.positions, &expected[&search_result.doc.id]);
         }
     }
 
     #[test]
     fn test_phrase2() {
         let mut index = InvertedIndex::new();
-        let doc1 = Document::new("1", "is is is");
+        let doc1 = Document::new(1, "is is is");
         index.index(doc1.clone());
         let expected: BTreeMap<_, _> = [(doc1.id.clone(),
                                          vec![Position::new((0, 1), 0),
@@ -420,14 +419,14 @@ mod test {
         let search_results = index.query(&Phrase("i i"));
         assert_eq!(search_results.len(), expected.len());
         for search_result in &search_results {
-            assert_eq!(&search_result.positions, &expected[&*search_result.doc.id]);
+            assert_eq!(&search_result.positions, &expected[&search_result.doc.id]);
         }
     }
 
     #[test]
     fn test_prefix() {
         let mut index = InvertedIndex::new();
-        let doc1 = Document::new("1", "is is is");
+        let doc1 = Document::new(1, "is is is");
         index.index(doc1.clone());
         let expected: BTreeMap<_, _> = [(doc1.id.clone(),
                                          vec![Position::new((0, 2), 0),
@@ -439,7 +438,7 @@ mod test {
         let search_results = index.query(&Prefix("i"));
         assert_eq!(search_results.len(), expected.len());
         for search_result in &search_results {
-            assert_eq!(&search_result.positions, &expected[&*search_result.doc.id]);
+            assert_eq!(&search_result.positions, &expected[&search_result.doc.id]);
         }
     }
 
