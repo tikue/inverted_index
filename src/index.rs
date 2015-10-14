@@ -1,5 +1,4 @@
-use std::char;
-use std::collections::Bound::{Included, Excluded};
+use std::collections::Bound::{Included, Excluded, Unbounded};
 use std::collections::BTreeMap;
 use std::hash::Hasher;
 use std::iter;
@@ -95,10 +94,16 @@ impl InvertedIndex {
     }
 
     fn prefix(&self, prefix: &str) -> PostingsMap {
+        if prefix.is_empty() { return PostingsMap::new(); }
+
         let min = Included(prefix);
         let mut max: String = prefix.into();
-        max.push(char::MAX);
-        let max = Excluded(&max);
+        let max = if let Some(next_char) = max.pop().unwrap().successor() {
+            max.push(next_char);
+            Excluded(&max)
+        } else {
+            Unbounded
+        };
         self.index.range(min, max).map(|(_k, v)| v).merge_postings()
     }
 
@@ -432,6 +437,27 @@ mod test {
                                            .cloned()
                                            .collect();
         let search_results = index.query(&Prefix("i"));
+        assert_eq!(search_results.len(), expected.len());
+        for search_result in &search_results {
+            assert_eq!(&search_result.positions, &expected[&*search_result.doc.id]);
+        }
+    }
+
+    #[test]
+    fn test_prefix_max_char_edge_case() {
+        use std::char;
+        let mut index = InvertedIndex::new();
+        let mut s: String = "a".into();
+        s.push(char::MAX);
+        s.push(char::MAX);
+        let doc1 = Document::new("1", s.clone());
+        index.index(doc1.clone());
+        s.pop();
+        let expected: BTreeMap<_, _> = [(doc1.id.clone(), vec![Position::new((0, 9), 0)])]
+                                           .iter()
+                                           .cloned()
+                                           .collect();
+        let search_results = index.query(&Prefix(&s));
         assert_eq!(search_results.len(), expected.len());
         for search_result in &search_results {
             assert_eq!(&search_result.positions, &expected[&*search_result.doc.id]);
