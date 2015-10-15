@@ -144,10 +144,11 @@ mod test {
                         iter::once((1, vec![Position::new((4, 5), 2), Position::new((6, 7), 3)]))
                             .collect()];
         assert_eq!(postings.iter().flat_map(|map| map).collect::<MergePostingsMap>().0,
-                   iter::once((1, vec![Position::new((0, 1), 0),
-                                       Position::new((2, 3), 1),
-                                       Position::new((4, 5), 2),
-                                       Position::new((6, 7), 3)]))
+                   iter::once((1,
+                               vec![Position::new((0, 1), 0),
+                                    Position::new((2, 3), 1),
+                                    Position::new((4, 5), 2),
+                                    Position::new((6, 7), 3)]))
                        .collect());
     }
 }

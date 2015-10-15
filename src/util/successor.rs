@@ -15,6 +15,10 @@ impl Successor for char {
         const BEFORE_SUR: u32 = SUR_START - 1;
         const AFTER_SUR: u32 = SUR_END + 1;
         let val = *self as u32;
-        char::from_u32(if val == BEFORE_SUR {AFTER_SUR} else {val + 1})
+        char::from_u32(if val == BEFORE_SUR {
+            AFTER_SUR
+        } else {
+            val + 1
+        })
     }
 }

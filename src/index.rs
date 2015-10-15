@@ -13,7 +13,8 @@ use util::*;
 
 /// A basic implementation of an `Index`, the inverted index is a data structure that maps
 /// from words to postings.
-#[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, RustcEncodable, RustcDecodable)]
+#[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, 
+         RustcEncodable, RustcDecodable)]
 pub struct InvertedIndex {
     // Maps terms to their postings
     index: BTreeMap<String, PostingsMap>,
@@ -77,7 +78,8 @@ impl InvertedIndex {
             .unique()
             .flat_map(|word| self.index.get(&word))
             .flat_map(|map| map)
-            .collect::<MergePostingsMap>().0
+            .collect::<MergePostingsMap>()
+            .0
 
     }
 
@@ -99,7 +101,9 @@ impl InvertedIndex {
     }
 
     fn prefix(&self, prefix: &str) -> PostingsMap {
-        if prefix.is_empty() { return PostingsMap::new(); }
+        if prefix.is_empty() {
+            return PostingsMap::new();
+        }
 
         let min = Included(prefix);
         let mut max: String = prefix.into();
@@ -109,10 +113,12 @@ impl InvertedIndex {
         } else {
             Unbounded
         };
-        self.index.range(min, max)
+        self.index
+            .range(min, max)
             .map(|(_k, v)| v)
             .flat_map(|map| map)
-            .collect::<MergePostingsMap>().0
+            .collect::<MergePostingsMap>()
+            .0
 
     }
 
@@ -124,10 +130,10 @@ impl InvertedIndex {
                 postings.intersect_postings()
             }
             Or(queries) => queries.into_iter()
-                .map(|q| self.query_rec(q))
-                .flat_map(|map| map)
-                .collect::<MergePostingsMap>().0
-,
+                                  .map(|q| self.query_rec(q))
+                                  .flat_map(|map| map)
+                                  .collect::<MergePostingsMap>()
+                                  .0,
             Phrase(phrase) => self.phrase(phrase),
             Prefix(prefix) => self.prefix(prefix),
         }
@@ -256,7 +262,8 @@ mod test {
     #[test]
     fn test_highlight() {
         let mut index = InvertedIndex::new();
-        let doc1 = Document::new(2, "Won\u{2019}t this split the ecosystem? Will everyone use?");
+        let doc1 = Document::new(2,
+                                 "Won\u{2019}t this split the ecosystem? Will everyone use?");
         index.index(doc1.clone());
         let expected = "Won\u{2019}t this split the *e*cosystem? Will *e*veryone use?";
         let search_results = index.search("e");

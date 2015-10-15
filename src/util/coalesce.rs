@@ -19,7 +19,9 @@ pub trait Coalesce: Sized + IntoIterator where Self::Item: Ord + Copy + Merge {
 
     /// Inserts, in order, the elements of an ordered iterable into self.
     /// Duplicate elements are not inserted.
-    fn merge_coalesce<Iter>(&mut self, other: Iter) where Iter: IntoIterator<Item = Self::Item> {
+    fn merge_coalesce<Iter>(&mut self, other: Iter)
+        where Iter: IntoIterator<Item = Self::Item>
+    {
         let mut idx = 0;
         for element in other {
             idx = self.search_coalesce(idx, element);
@@ -75,16 +77,20 @@ impl<T: Ord + Copy + Merge> Coalesce for Vec<T> {
 /// `merge_coalesce`d.
 pub struct MergeCoalesceMap<K, V>(pub BTreeMap<K, V>);
 
-impl<'a, 'b, K, V> FromIterator<(&'a K, &'b V)> for MergeCoalesceMap<K, V> 
+impl<'a, 'b, K, V> FromIterator<(&'a K, &'b V)> for MergeCoalesceMap<K, V>
     where K: 'a + Ord + Clone,
           V: 'b + Coalesce + Clone,
           V::Item: Ord + Copy + Merge
 {
-    fn from_iter<It>(iterator: It) -> Self where It: IntoIterator<Item=(&'a K, &'b V)> {
+    fn from_iter<It>(iterator: It) -> Self
+        where It: IntoIterator<Item = (&'a K, &'b V)>
+    {
         let mut map = BTreeMap::new();
         for (k, v) in iterator {
             match map.entry(k.clone()) {
-                Vacant(entry) => { entry.insert(v.clone()); }
+                Vacant(entry) => {
+                    entry.insert(v.clone());
+                }
                 Occupied(mut entry) => entry.get_mut().merge_coalesce(v.clone()),
             }
         }
@@ -92,16 +98,20 @@ impl<'a, 'b, K, V> FromIterator<(&'a K, &'b V)> for MergeCoalesceMap<K, V>
     }
 }
 
-impl<K, V> FromIterator<(K, V)> for MergeCoalesceMap<K, V> 
+impl<K, V> FromIterator<(K, V)> for MergeCoalesceMap<K, V>
     where K: Ord + Clone,
           V: Coalesce + Clone,
           V::Item: Ord + Copy + Merge
 {
-    fn from_iter<It>(iterator: It) -> Self where It: IntoIterator<Item=(K, V)> {
+    fn from_iter<It>(iterator: It) -> Self
+        where It: IntoIterator<Item = (K, V)>
+    {
         let mut map = BTreeMap::new();
         for (k, v) in iterator {
             match map.entry(k) {
-                Vacant(entry) => { entry.insert(v); }
+                Vacant(entry) => {
+                    entry.insert(v);
+                }
                 Occupied(mut entry) => entry.get_mut().merge_coalesce(v.into_iter()),
             }
         }
