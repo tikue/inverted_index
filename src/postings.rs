@@ -1,7 +1,5 @@
-use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
-use std::collections::btree_map::Entry::*;
 
 use util::*;
 
@@ -41,32 +39,8 @@ impl Merge for Position {
 /// Records which Documents contain the term, and at which locations in the documents.
 pub type PostingsMap = BTreeMap<usize, Vec<Position>>;
 
-/// An extension trait for iterables over `PostingsMap`s
-/// that enables computing their union.
-pub trait PostingsMerge {
-    /// Computes the map containing the union of the maps in self
-    fn merge_postings(self) -> PostingsMap;
-}
-
-impl<'a, Iter> PostingsMerge for Iter
-    where Iter: IntoIterator,
-          Iter::Item: Borrow<PostingsMap> {
-    fn merge_postings(self) -> PostingsMap {
-        let mut map = PostingsMap::new();
-        for tree in self {
-            for (doc_id, positions) in tree.borrow() {
-                match map.entry(doc_id.clone()) {
-                    Vacant(entry) => {
-                        entry.insert(positions.clone());
-                    }
-                    Occupied(mut entry) =>
-                        entry.get_mut().merge_coalesce(positions.iter().cloned()),
-                }
-            }
-        }
-        map
-    }
-}
+/// A MergeCoalesceMap for postings.
+pub type MergePostingsMap = MergeCoalesceMap<usize, Vec<Position>>;
 
 /// An extension trait for slices of `PostingsMap`s
 /// that enables computing their intersection.
@@ -161,16 +135,15 @@ impl PositionalIntersect for PostingsMap {
 #[cfg(test)]
 mod test {
     use std::iter;
-    use super::super::Position;
-    use super::PostingsMerge;
+    use super::super::{MergePostingsMap, Position, PostingsMap};
 
     #[test]
     fn test_merge() {
         let postings = [iter::once((1, vec![Position::new((0, 1), 0), Position::new((2, 3), 1)]))
-                            .collect(),
+                            .collect::<PostingsMap>(),
                         iter::once((1, vec![Position::new((4, 5), 2), Position::new((6, 7), 3)]))
                             .collect()];
-        assert_eq!(postings.iter().merge_postings(),
+        assert_eq!(postings.iter().flat_map(|map| map).collect::<MergePostingsMap>().0,
                    iter::once((1, vec![Position::new((0, 1), 0),
                                        Position::new((2, 3), 1),
                                        Position::new((4, 5), 2),

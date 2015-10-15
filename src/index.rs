@@ -73,7 +73,12 @@ impl InvertedIndex {
     }
 
     fn postings(&self, query: &str) -> PostingsMap {
-        analyze_query(query).unique().flat_map(|word| self.index.get(&word)).merge_postings()
+        analyze_query(query)
+            .unique()
+            .flat_map(|word| self.index.get(&word))
+            .flat_map(|map| map)
+            .collect::<MergePostingsMap>().0
+
     }
 
     fn phrase(&self, phrase: &str) -> PostingsMap {
@@ -104,7 +109,11 @@ impl InvertedIndex {
         } else {
             Unbounded
         };
-        self.index.range(min, max).map(|(_k, v)| v).merge_postings()
+        self.index.range(min, max)
+            .map(|(_k, v)| v)
+            .flat_map(|map| map)
+            .collect::<MergePostingsMap>().0
+
     }
 
     fn query_rec(&self, query: &Query) -> PostingsMap {
@@ -114,7 +123,11 @@ impl InvertedIndex {
                 let postings: Vec<_> = queries.iter().map(|q| self.query_rec(q)).collect();
                 postings.intersect_postings()
             }
-            Or(queries) => queries.into_iter().map(|q| self.query_rec(q)).merge_postings(),
+            Or(queries) => queries.into_iter()
+                .map(|q| self.query_rec(q))
+                .flat_map(|map| map)
+                .collect::<MergePostingsMap>().0
+,
             Phrase(phrase) => self.phrase(phrase),
             Prefix(prefix) => self.prefix(prefix),
         }

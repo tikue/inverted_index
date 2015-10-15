@@ -1,3 +1,7 @@
+use std::collections::BTreeMap;
+use std::collections::btree_map::Entry::*;
+use std::iter::FromIterator;
+
 /// Enables the ability to merge two items
 pub trait Merge: Ord + Copy {
     /// Returns the result of merging self with other, if possible, and None otherwise.
@@ -7,30 +11,23 @@ pub trait Merge: Ord + Copy {
 /// Enables the ability to coalesce items in a collection
 /// Coalescence occurs when two items in the collection are merged
 /// in lieu of inserting a new item
-pub trait Coalesce {
-    /// The type of element that can be coalesced.
-    type Element: Ord + Copy + Merge;
-
+pub trait Coalesce: Sized + IntoIterator where Self::Item: Ord + Copy + Merge {
     /// Inserts or merges, if possible, the item into the collection at the given index.
-    fn coalesce(&mut self, index: usize, el: Self::Element);
+    fn coalesce(&mut self, index: usize, el: Self::Item);
     /// Searches for the index to insert the element in order, then coalesces at the found index;
-    fn search_coalesce(&mut self, start: usize, el: Self::Element) -> usize;
+    fn search_coalesce(&mut self, start: usize, el: Self::Item) -> usize;
 
     /// Inserts, in order, the elements of an ordered iterable into self.
     /// Duplicate elements are not inserted.
-    fn merge_coalesce<Iter>(&mut self, iter: Iter)
-        where Iter: IntoIterator<Item = Self::Element>
-    {
+    fn merge_coalesce<Iter>(&mut self, other: Iter) where Iter: IntoIterator<Item = Self::Item> {
         let mut idx = 0;
-        for element in iter {
+        for element in other {
             idx = self.search_coalesce(idx, element);
         }
     }
 }
 
 impl<T: Ord + Copy + Merge> Coalesce for Vec<T> {
-    type Element = T;
-
     fn coalesce(&mut self, index: usize, el: T) {
         let merge = T::merge;
         if self.is_empty() {
@@ -71,6 +68,44 @@ impl<T: Ord + Copy + Merge> Coalesce for Vec<T> {
                 idx
             }
         }
+    }
+}
+
+/// A wrapper type that implements FromIterator in such a way that duplicate documents are
+/// `merge_coalesce`d.
+pub struct MergeCoalesceMap<K, V>(pub BTreeMap<K, V>);
+
+impl<'a, 'b, K, V> FromIterator<(&'a K, &'b V)> for MergeCoalesceMap<K, V> 
+    where K: 'a + Ord + Clone,
+          V: 'b + Coalesce + Clone,
+          V::Item: Ord + Copy + Merge
+{
+    fn from_iter<It>(iterator: It) -> Self where It: IntoIterator<Item=(&'a K, &'b V)> {
+        let mut map = BTreeMap::new();
+        for (k, v) in iterator {
+            match map.entry(k.clone()) {
+                Vacant(entry) => { entry.insert(v.clone()); }
+                Occupied(mut entry) => entry.get_mut().merge_coalesce(v.clone()),
+            }
+        }
+        MergeCoalesceMap(map)
+    }
+}
+
+impl<K, V> FromIterator<(K, V)> for MergeCoalesceMap<K, V> 
+    where K: Ord + Clone,
+          V: Coalesce + Clone,
+          V::Item: Ord + Copy + Merge
+{
+    fn from_iter<It>(iterator: It) -> Self where It: IntoIterator<Item=(K, V)> {
+        let mut map = BTreeMap::new();
+        for (k, v) in iterator {
+            match map.entry(k) {
+                Vacant(entry) => { entry.insert(v); }
+                Occupied(mut entry) => entry.get_mut().merge_coalesce(v.into_iter()),
+            }
+        }
+        MergeCoalesceMap(map)
     }
 }
 
