@@ -38,7 +38,7 @@ impl InvertedIndex {
     pub fn index(&mut self, doc: Document) {
         let previous_version = self.docs.insert(doc.id, doc.clone());
         if let Some(previous_version) = previous_version {
-            let previous_analyzed = analyze_doc(previous_version.content());
+            let previous_analyzed = NgramsAnalyzer::analyze(previous_version.content());
             for (ngram, _) in previous_analyzed {
                 let is_empty = {
                     let docs_for_ngram = self.index.get_mut(&ngram).unwrap();
@@ -51,7 +51,7 @@ impl InvertedIndex {
             }
         }
 
-        let analyzed = analyze_doc(doc.content());
+        let analyzed = NgramsAnalyzer::analyze(doc.content());
         for (ngram, position) in analyzed {
             self.index
                 .entry(ngram)
@@ -74,7 +74,7 @@ impl InvertedIndex {
     }
 
     fn postings(&self, query: &str) -> PostingsMap {
-        analyze_query(query)
+        WhitespaceAnalyzer::analyze(query)
             .unique()
             .flat_map(|word| self.index.get(&word))
             .flat_map(|map| map)
@@ -84,7 +84,7 @@ impl InvertedIndex {
     }
 
     fn phrase(&self, phrase: &str) -> PostingsMap {
-        let terms: Vec<_> = analyze_query(phrase).collect();
+        let terms: Vec<_> = WhitespaceAnalyzer::analyze(phrase).collect();
         let postings: Vec<_> = terms.windows(2)
                                     .map(|adjacent_terms| {
                                         let term0 = &adjacent_terms[0];
@@ -150,26 +150,48 @@ impl InvertedIndex {
     }
 }
 
-type Tokens<'a> = iter::FlatMap<
-                iter::Enumerate<
-                    iter::Filter<
-                        GroupBy<bool, CharIndices<'a>, fn(&(usize, char)) -> bool>,
-                        fn(&(bool, Vec<(usize, char)>)) -> bool>>,
-                iter::Map<ops::Range<usize>, Ngrams>,
-                fn((usize, (bool, Vec<(usize, char)>))) -> iter::Map<ops::Range<usize>, Ngrams>>;
 
-type QueryTokens<'a> = iter::Map<SplitWhitespace<'a>, fn(&str) -> String>;
-
-fn analyze_query(query: &str) -> QueryTokens {
-    query.split_whitespace().map(str::to_lowercase)
+trait QueryAnalyzer<'a> {
+    type Tokens: Iterator<Item=String>;
+    fn analyze(&'a str) -> Self::Tokens;
 }
 
-fn analyze_doc(doc: &str) -> Tokens {
-    doc.char_indices()
-       .group_by(is_whitespace as fn(&(usize, char)) -> bool)
-       .filter(not_whitespace as fn(&(bool, Vec<(usize, char)>)) -> bool)
-       .enumerate()
-       .flat_map(ngrams)
+struct WhitespaceAnalyzer;
+
+impl<'a> QueryAnalyzer<'a> for WhitespaceAnalyzer {
+    type Tokens = iter::Map<SplitWhitespace<'a>, fn(&str) -> String>;
+
+    fn analyze(s: &'a str) -> Self::Tokens {
+        s.split_whitespace().map(str::to_lowercase)
+    }
+}
+
+trait DocAnalyzer<'a> {
+    type Tokens: Iterator<Item=(String, Position)>;
+    fn analyze(&'a str) -> Self::Tokens;
+}
+
+struct NgramsAnalyzer;
+type WordPositions<'a> = GroupBy<bool, CharIndices<'a>, fn(&(usize, char)) -> bool>;
+type WordPositionsNoWhitespace<'a> = iter::Filter<
+    WordPositions<'a>,
+    fn(&(bool, Vec<(usize, char)>)) -> bool>;
+type NgramsIter = iter::Map<ops::Range<usize>, Ngrams>;
+type NgramsFn = fn((usize, (bool, Vec<(usize, char)>))) -> NgramsIter;
+
+impl<'a> DocAnalyzer<'a> for NgramsAnalyzer {
+    type Tokens = iter::FlatMap<
+                    iter::Enumerate<WordPositionsNoWhitespace<'a>>,
+                    NgramsIter,
+                    NgramsFn>;
+
+    fn analyze(s: &'a str) -> Self::Tokens {
+        s.char_indices()
+         .group_by(is_whitespace as fn(&(usize, char)) -> bool)
+         .filter(not_whitespace as fn(&(bool, Vec<(usize, char)>)) -> bool)
+         .enumerate()
+         .flat_map(ngrams)
+    }
 }
 
 fn ngrams((position, (_, chars)): (usize, (bool, Vec<(usize, char)>)))
