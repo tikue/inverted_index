@@ -1,11 +1,8 @@
 use std::collections::Bound::{Included, Excluded, Unbounded};
 use std::collections::BTreeMap;
 use std::hash::Hasher;
-use std::iter;
-use std::str::{CharIndices, SplitWhitespace};
-use std::ops;
 
-use itertools::{GroupBy, Itertools};
+use itertools::Itertools;
 
 use Query::*;
 use super::*;
@@ -15,11 +12,33 @@ use util::*;
 /// from words to postings.
 #[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, 
          RustcEncodable, RustcDecodable)]
-pub struct InvertedIndex {
+pub struct InvertedIndex<QueryAnalyzer=WhitespaceAnalyzer, DocAnalyzer=NgramsAnalyzer> {
     // Maps terms to their postings
     index: BTreeMap<String, PostingsMap>,
     // Maps doc ids to their docs
     docs: BTreeMap<usize, Document>,
+    query_analyzer: QueryAnalyzer,
+    doc_analyzer: DocAnalyzer,
+}
+
+/// Builder for an InvertedIndex with custom analyzers.
+pub struct InvertedIndexBuilder<QueryAnalyzer, DocAnalyzer> {
+    /// The analyzer to use on queries.
+    pub query_analyzer: QueryAnalyzer,
+    /// The analyzer to use on documents.
+    pub doc_analyzer: DocAnalyzer,
+}
+
+impl<QueryAnalyzer, DocAnalyzer> InvertedIndexBuilder<QueryAnalyzer, DocAnalyzer> {
+    /// Build an InvertedIndex using custom analyzers.
+    pub fn build(self) -> InvertedIndex<QueryAnalyzer, DocAnalyzer> {
+        InvertedIndex {
+            index: BTreeMap::new(),
+            docs: BTreeMap::new(),
+            query_analyzer: self.query_analyzer,
+            doc_analyzer: self.doc_analyzer,
+        }
+    }
 }
 
 impl InvertedIndex {
@@ -28,9 +47,15 @@ impl InvertedIndex {
         InvertedIndex {
             index: BTreeMap::new(),
             docs: BTreeMap::new(),
+            query_analyzer: WhitespaceAnalyzer,
+            doc_analyzer: NgramsAnalyzer,
         }
     }
+}
 
+impl<QueryAnalyzer, DocAnalyzer> InvertedIndex<QueryAnalyzer, DocAnalyzer>
+    where QueryAnalyzer: for <'a> Analyzer<'a>,
+          DocAnalyzer: for <'a> Analyzer<'a> {
     /// Inserts the document.
     /// Insertings a document involves tokenizing the document's content
     /// and inserting each token into the index, pointing to the document and its position in the
@@ -38,7 +63,7 @@ impl InvertedIndex {
     pub fn index(&mut self, doc: Document) {
         let previous_version = self.docs.insert(doc.id, doc.clone());
         if let Some(previous_version) = previous_version {
-            let previous_analyzed = NgramsAnalyzer::analyze(previous_version.content());
+            let previous_analyzed = self.doc_analyzer.analyze(previous_version.content());
             for (ngram, _) in previous_analyzed {
                 let is_empty = {
                     let docs_for_ngram = self.index.get_mut(&ngram).unwrap();
@@ -51,7 +76,7 @@ impl InvertedIndex {
             }
         }
 
-        let analyzed = NgramsAnalyzer::analyze(doc.content());
+        let analyzed = self.doc_analyzer.analyze(doc.content());
         for (ngram, position) in analyzed {
             self.index
                 .entry(ngram)
@@ -74,7 +99,8 @@ impl InvertedIndex {
     }
 
     fn postings(&self, query: &str) -> PostingsMap {
-        WhitespaceAnalyzer::analyze(query)
+        self.query_analyzer
+            .analyze_tokens(query)
             .unique()
             .flat_map(|word| self.index.get(&word))
             .flat_map(|map| map)
@@ -84,7 +110,7 @@ impl InvertedIndex {
     }
 
     fn phrase(&self, phrase: &str) -> PostingsMap {
-        let terms: Vec<_> = WhitespaceAnalyzer::analyze(phrase).collect();
+        let terms: Vec<_> = self.query_analyzer.analyze_tokens(phrase).collect();
         let postings: Vec<_> = terms.windows(2)
                                     .map(|adjacent_terms| {
                                         let term0 = &adjacent_terms[0];
@@ -147,100 +173,6 @@ impl InvertedIndex {
                                           .collect();
         results.sort_by(|result1, result2| result2.score.partial_cmp(&result1.score).unwrap());
         results
-    }
-}
-
-
-trait QueryAnalyzer<'a> {
-    type Tokens: Iterator<Item=String>;
-    fn analyze(&'a str) -> Self::Tokens;
-}
-
-struct WhitespaceAnalyzer;
-
-impl<'a> QueryAnalyzer<'a> for WhitespaceAnalyzer {
-    type Tokens = iter::Map<SplitWhitespace<'a>, fn(&str) -> String>;
-
-    fn analyze(s: &'a str) -> Self::Tokens {
-        s.split_whitespace().map(str::to_lowercase)
-    }
-}
-
-trait DocAnalyzer<'a> {
-    type Tokens: Iterator<Item=(String, Position)>;
-    fn analyze(&'a str) -> Self::Tokens;
-}
-
-struct NgramsAnalyzer;
-type WordPositions<'a> = GroupBy<bool, CharIndices<'a>, fn(&(usize, char)) -> bool>;
-type WordPositionsNoWhitespace<'a> = iter::Filter<
-    WordPositions<'a>,
-    fn(&(bool, Vec<(usize, char)>)) -> bool>;
-type NgramsIter = iter::Map<ops::Range<usize>, Ngrams>;
-type NgramsFn = fn((usize, (bool, Vec<(usize, char)>))) -> NgramsIter;
-
-impl<'a> DocAnalyzer<'a> for NgramsAnalyzer {
-    type Tokens = iter::FlatMap<
-                    iter::Enumerate<WordPositionsNoWhitespace<'a>>,
-                    NgramsIter,
-                    NgramsFn>;
-
-    fn analyze(s: &'a str) -> Self::Tokens {
-        s.char_indices()
-         .group_by(is_whitespace as fn(&(usize, char)) -> bool)
-         .filter(not_whitespace as fn(&(bool, Vec<(usize, char)>)) -> bool)
-         .enumerate()
-         .flat_map(ngrams)
-    }
-}
-
-fn ngrams((position, (_, chars)): (usize, (bool, Vec<(usize, char)>)))
-          -> iter::Map<ops::Range<usize>, Ngrams> {
-    (1..chars.len() + 1).map(Ngrams::new(position, chars))
-}
-
-fn not_whitespace(&(is_whitespace, _): &(bool, Vec<(usize, char)>)) -> bool {
-    !is_whitespace
-}
-
-fn is_whitespace(&(_, c): &(usize, char)) -> bool {
-    c.is_whitespace()
-}
-
-struct Ngrams {
-    position: usize,
-    chars: Vec<(usize, char)>,
-}
-
-impl Ngrams {
-    fn new(position: usize, chars: Vec<(usize, char)>) -> Ngrams {
-        Ngrams {
-            position: position,
-            chars: chars,
-        }
-    }
-}
-
-impl Fn<(usize,)> for Ngrams {
-    extern "rust-call" fn call(&self, (to,): (usize,)) -> (String, Position) {
-        let word = self.chars[..to].iter().flat_map(|&(_, c)| c.to_lowercase()).collect();
-        let start = self.chars[0].0;
-        let (last_idx, last_char) = self.chars[to - 1];
-        let finish = last_idx + last_char.len_utf8();
-        (word, Position::new((start, finish), self.position))
-    }
-}
-
-impl FnMut<(usize,)> for Ngrams {
-    extern "rust-call" fn call_mut(&mut self, to: (usize,)) -> (String, Position) {
-        self.call(to)
-    }
-}
-
-impl FnOnce<(usize,)> for Ngrams {
-    type Output = (String, Position);
-    extern "rust-call" fn call_once(self, to: (usize,)) -> (String, Position) {
-        self.call(to)
     }
 }
 

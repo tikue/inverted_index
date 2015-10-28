@@ -1,5 +1,5 @@
 #![feature(plugin, unboxed_closures, core, iter_arith, custom_attribute, slice_patterns, 
-           collections_bound, btree_range)]
+           collections_bound, btree_range, associated_type_defaults)]
 #![plugin(clippy)]
 #![deny(missing_docs)]
 
@@ -81,9 +81,11 @@ mod index;
 mod postings;
 mod query;
 mod search_result;
+mod analyzers;
 
-pub use index::InvertedIndex;
+pub use index::{InvertedIndex, InvertedIndexBuilder};
 pub use document::Document;
 pub use search_result::SearchResult;
 pub use postings::{MergePostingsMap, PostingsMap, PostingsIntersect, PositionalIntersect, Position};
 pub use query::Query;
+pub use analyzers::{Analyzer, WhitespaceAnalyzer, NgramsAnalyzer};
