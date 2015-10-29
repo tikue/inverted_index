@@ -6,6 +6,9 @@ pub mod coalesce;
 /// implemented for chars.
 pub mod successor;
 
+/// Utility functions for encoding and decoding utf-8 to and from bytes.
+pub mod char_utf8;
+
 pub use self::btree_map_ext::{BTreeMapExt, Intersection};
 pub use self::coalesce::{Coalesce, Merge, MergeCoalesceMap};
 pub use self::successor::Successor;
