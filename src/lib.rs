@@ -82,10 +82,12 @@ mod postings;
 mod query;
 mod search_result;
 mod analyzers;
+mod tokenizers;
 
 pub use index::{InvertedIndex, InvertedIndexBuilder};
 pub use document::Document;
 pub use search_result::SearchResult;
-pub use postings::{MergePostingsMap, PostingsMap, PostingsIntersect, PositionalIntersect, Position};
+pub use postings::{MergePostingsMap, PostingsMap, PostingsIntersect, PositionalIntersect};
 pub use query::Query;
 pub use analyzers::{Analyzer, WhitespaceAnalyzer, NgramsAnalyzer};
+pub use tokenizers::{EnglishUtf8, Position, Tokenizer, Token};

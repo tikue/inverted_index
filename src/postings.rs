@@ -1,29 +1,8 @@
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
+use tokenizers::Position;
 use util::*;
-
-/// Information about the position of a single term within a document
-#[derive(Copy, Clone, Debug, Hash, Eq, Ord, PartialEq, PartialOrd, RustcDecodable, RustcEncodable)]
-pub struct Position {
-    /// Pair of byte indexes into the document at the beginning (inclusive) and end (exclusive) of 
-    /// the term.
-    pub offsets: (usize, usize),
-    /// The token position of the term, i.e., the number of tokens that occur before it in the doc.
-    /// For example, for the sentence "I have to go to the store",
-    /// the term "to" has positions [2, 4].
-    pub position: usize,
-}
-
-impl Position {
-    /// Creates a new Position struct with the given offsets and position.
-    pub fn new(offsets: (usize, usize), position: usize) -> Position {
-        Position {
-            offsets: offsets,
-            position: position,
-        }
-    }
-}
 
 impl Merge for Position {
     fn merge(self, other: Position) -> Option<Position> {

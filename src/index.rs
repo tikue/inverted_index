@@ -186,7 +186,7 @@ mod test {
     use std::collections::BTreeMap;
 
     #[test]
-    fn test_ngrams() {
+    fn ngrams() {
         let mut index = InvertedIndex::new();
         let doc1 = Document::new(1, "learn to program in rust today");
         let doc2 = Document::new(2, "what did you today do");
@@ -214,7 +214,7 @@ mod test {
     }
 
     #[test]
-    fn test_highlight() {
+    fn highlight() {
         let mut index = InvertedIndex::new();
         let doc1 = Document::new(2,
                                  "Won\u{2019}t this split the ecosystem? Will everyone use?");
@@ -226,7 +226,7 @@ mod test {
     }
 
     #[test]
-    fn test_unicode() {
+    fn unicode() {
         let mut index = InvertedIndex::new();
         let doc = Document::new(0, "嗨, 您好");
         index.index(doc.clone());
@@ -238,7 +238,7 @@ mod test {
     }
 
     #[test]
-    fn test_update_doc() {
+    fn update_doc() {
         let mut index = InvertedIndex::new();
         let doc = Document::new(0, "abc åäö");
         index.index(doc);
@@ -250,7 +250,7 @@ mod test {
     }
 
     #[test]
-    fn test_ranking() {
+    fn ranking() {
         let mut index = InvertedIndex::new();
         let doc = Document::new(0, "beat");
         index.index(doc.clone());
@@ -263,7 +263,7 @@ mod test {
     }
 
     #[test]
-    fn test_duplicate_term() {
+    fn duplicate_term() {
         let mut index = InvertedIndex::new();
         let doc = Document::new(0, "beat");
         index.index(doc.clone());
@@ -272,7 +272,7 @@ mod test {
     }
 
     #[test]
-    fn test_duplicate_term2() {
+    fn duplicate_term2() {
         let mut index = InvertedIndex::new();
         let doc = Document::new(0, "beat");
         index.index(doc.clone());
@@ -282,7 +282,7 @@ mod test {
     }
 
     #[test]
-    fn test_lowercase_search() {
+    fn lowercase_search() {
         let mut index = InvertedIndex::new();
         let doc = Document::new(0, "BeAt");
         index.index(doc.clone());
@@ -292,7 +292,7 @@ mod test {
     }
 
     #[test]
-    fn test_lowercase_index() {
+    fn lowercase_index() {
         let mut index = InvertedIndex::new();
         let doc = Document::new(0, "BeAt");
         index.index(doc.clone());
@@ -302,7 +302,7 @@ mod test {
     }
 
     #[test]
-    fn test_and() {
+    fn and() {
         let mut index = InvertedIndex::new();
         let doc1 = Document::new(1, "learn to program in rust today");
         let doc2 = Document::new(2, "what did you today do");
@@ -324,7 +324,7 @@ mod test {
     }
 
     #[test]
-    fn test_and_or() {
+    fn and_or() {
         let mut index = InvertedIndex::new();
         let doc1 = Document::new(1, "learn to program in rust today");
         let doc2 = Document::new(2, "what did you today do");
@@ -348,7 +348,7 @@ mod test {
     }
 
     #[test]
-    fn test_phrase() {
+    fn phrase() {
         let mut index = InvertedIndex::new();
         let doc1 = Document::new(1, "learn to program in rust today");
         index.index(doc1.clone());
@@ -379,7 +379,7 @@ mod test {
     }
 
     #[test]
-    fn test_phrase2() {
+    fn phrase2() {
         let mut index = InvertedIndex::new();
         let doc1 = Document::new(1, "is is is");
         index.index(doc1.clone());
@@ -398,7 +398,7 @@ mod test {
     }
 
     #[test]
-    fn test_prefix() {
+    fn prefix() {
         let mut index = InvertedIndex::new();
         let doc1 = Document::new(1, "is is is");
         index.index(doc1.clone());
@@ -417,7 +417,7 @@ mod test {
     }
 
     #[test]
-    fn test_prefix_max_char_edge_case() {
+    fn prefix_max_char_edge_case() {
         use std::char;
         let mut index = InvertedIndex::new();
         let mut s: String = "a".into();
@@ -435,5 +435,14 @@ mod test {
         for search_result in &search_results {
             assert_eq!(&search_result.positions, &expected[&search_result.doc.id]);
         }
+    }
+
+    #[test]
+    fn char_len_change() {
+        let mut index = InvertedIndex::new();
+        let s: String = "İ".into();
+        let doc1 = Document::new(1, s.clone());
+        index.index(doc1.clone());
+        assert_eq!(index.index["i̇"][&1][0].offsets.1, 2);
     }
 }

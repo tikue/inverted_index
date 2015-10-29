@@ -2,7 +2,7 @@ use std::iter;
 use std::ops;
 use std::str::CharIndices;
 use itertools::{GroupBy, Itertools};
-use Position;
+use tokenizers::{Position, Token};
 
 /// An analyzer turns a string into an iterator of pairs of tokens and positions.
 pub trait Analyzer<'a> {
