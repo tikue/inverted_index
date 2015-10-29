@@ -1,4 +1,4 @@
-#![feature(plugin, unboxed_closures, core, iter_arith, custom_attribute, slice_patterns, 
+#![feature(plugin, unboxed_closures, core, iter_arith, custom_attribute, slice_patterns,
            collections_bound, btree_range, associated_type_defaults)]
 #![plugin(clippy)]
 #![deny(missing_docs)]
@@ -88,5 +88,5 @@ pub use document::Document;
 pub use search_result::SearchResult;
 pub use postings::{MergePostingsMap, PostingsMap, PostingsIntersect, PositionalIntersect};
 pub use query::Query;
-pub use tokenizers::{EnglishUtf8, NgramsFilter, LowercaseFilter, Position, Tokenizer, Token, 
+pub use tokenizers::{EnglishUtf8, NgramsFilter, LowercaseFilter, Position, Tokenizer, Token,
                      lowercase_ngrams};

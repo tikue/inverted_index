@@ -57,8 +57,13 @@ pub trait Tokenizer {
     fn read(&mut self, tok: &mut Token) -> io::Result<bool>;
 
     /// Returns the tokenizer output as an iterator.
-    fn into_iter(self) -> Iter<Self> where Self: Sized {
-        Iter { tokenizer: self, err: false }
+    fn into_iter(self) -> Iter<Self>
+        where Self: Sized
+    {
+        Iter {
+            tokenizer: self,
+            err: false,
+        }
     }
 }
 
@@ -79,7 +84,10 @@ impl<Tknzr: Tokenizer> Iterator for Iter<Tknzr> {
         match self.tokenizer.read(&mut tok) {
             Ok(true) => Some(Ok(tok)),
             Ok(false) => None,
-            Err(err) => { self.err = true; Some(Err(err)) },
+            Err(err) => {
+                self.err = true;
+                Some(Err(err))
+            }
         }
     }
 }
@@ -94,7 +102,7 @@ pub struct EnglishUtf8<Buf> {
 impl<Buf: io::BufRead> EnglishUtf8<Buf> {
     /// Creates a new tokenizer backed by the given buffer.
     pub fn new(rdr: Buf) -> EnglishUtf8<Buf> {
-        EnglishUtf8 { 
+        EnglishUtf8 {
             rdr: rdr,
             offset: 0,
             num_tokens: 0,
@@ -105,7 +113,7 @@ impl<Buf: io::BufRead> EnglishUtf8<Buf> {
 impl EnglishUtf8<io::Cursor<Vec<u8>>> {
     /// Construct an EnglishUtf8 tokenizer backed by a byte buffer.
     pub fn from_bytes<B>(bytes: B) -> EnglishUtf8<io::Cursor<Vec<u8>>>
-        where B: Into<Vec<u8>> 
+        where B: Into<Vec<u8>>
     {
         EnglishUtf8::new(io::Cursor::new(bytes.into()))
     }
@@ -120,7 +128,7 @@ impl<Buf: io::BufRead> Tokenizer for EnglishUtf8<Buf> {
     fn read(&mut self, tok: &mut Token) -> io::Result<bool> {
         let mut consumed = 0;
         tok.token.clear();
-'LOOP:  loop {
+        'LOOP: loop {
             self.rdr.consume(consumed);
             consumed = 0;
             let buf = try!(self.rdr.fill_buf());
@@ -137,9 +145,12 @@ impl<Buf: io::BufRead> Tokenizer for EnglishUtf8<Buf> {
                     None => {
                         consumed += 1;
                         self.offset += 1;
-                        continue
+                        continue;
                     }
-                    Some((n, c)) => { consumed += n; (n, c) }
+                    Some((n, c)) => {
+                        consumed += n;
+                        (n, c)
+                    }
                 };
                 if c.is_whitespace() {
                     self.offset += n;
@@ -188,7 +199,7 @@ impl<Buf: io::BufRead> NgramsFilter<EnglishUtf8<Buf>> {
 impl NgramsFilter<EnglishUtf8<io::Cursor<Vec<u8>>>> {
     /// Creates a new NgramsFilter with a backing English UTF-8 tokenizer backed by the bytes.
     pub fn from_bytes<B>(bytes: B) -> NgramsFilter<EnglishUtf8<io::Cursor<Vec<u8>>>>
-        where B: Into<Vec<u8>> 
+        where B: Into<Vec<u8>>
     {
         NgramsFilter {
             tokenizer: EnglishUtf8::from_bytes(bytes),
@@ -201,7 +212,7 @@ impl NgramsFilter<EnglishUtf8<io::Cursor<Vec<u8>>>> {
 impl<Tknzr: Tokenizer> Tokenizer for NgramsFilter<Tknzr> {
     fn read(&mut self, tok: &mut Token) -> io::Result<bool> {
         match self.next.pop() {
-            Some(next) => { 
+            Some(next) => {
                 *tok = next;
                 Ok(true)
             }
@@ -210,13 +221,15 @@ impl<Tknzr: Tokenizer> Tokenizer for NgramsFilter<Tknzr> {
                     done @ Ok(false) | done @ Err(_) => done,
                     Ok(true) => {
                         let start = tok.position.offsets.0;
-                        let chars: Vec<_> = tok.token.char_indices()
-                                                     .map(|(offset, c)| (start + offset, c))
-                                                     .collect();
+                        let chars: Vec<_> = tok.token
+                                               .char_indices()
+                                               .map(|(offset, c)| (start + offset, c))
+                                               .collect();
                         self.next.extend((1..chars.len() + 1).rev().map(|to| {
-                            let token: String = chars[..to].iter()
-                                                  .map(|&(_, c)| c)
-                                                  .collect();
+                            let token: String = chars[..to]
+                                                    .iter()
+                                                    .map(|&(_, c)| c)
+                                                    .collect();
                             let (last_idx, last_char) = chars[to - 1];
                             let finish = last_idx + last_char.len_utf8();
                             Token::new(token, (start, finish), tok.position.position)
@@ -238,9 +251,7 @@ pub struct LowercaseFilter<Tknzr: Tokenizer> {
 impl<Tknzr: Tokenizer> LowercaseFilter<Tknzr> {
     /// Creates a new LowercaseFilter with the specified backing tokenizer.
     pub fn after_tokenizer(tokenizer: Tknzr) -> LowercaseFilter<Tknzr> {
-        LowercaseFilter {
-            tokenizer: tokenizer
-        }
+        LowercaseFilter { tokenizer: tokenizer }
     }
 }
 
@@ -254,7 +265,7 @@ impl<Buf: io::BufRead> LowercaseFilter<EnglishUtf8<Buf>> {
 impl LowercaseFilter<EnglishUtf8<io::Cursor<Vec<u8>>>> {
     /// Creates a new LowercaseFilter with a backing English UTF-8 tokenizer backed by the bytes.
     pub fn from_bytes<B>(bytes: B) -> LowercaseFilter<EnglishUtf8<io::Cursor<Vec<u8>>>>
-        where B: Into<Vec<u8>> 
+        where B: Into<Vec<u8>>
     {
         LowercaseFilter::after_tokenizer(EnglishUtf8::from_bytes(bytes))
     }
@@ -274,9 +285,9 @@ impl<Tknzr: Tokenizer> Tokenizer for LowercaseFilter<Tknzr> {
 }
 
 /// Creates a lowercase-ngrams tokenizer by chaining two filters.
-pub fn lowercase_ngrams<B>(bytes: B) 
-    -> LowercaseFilter<NgramsFilter<EnglishUtf8<io::Cursor<Vec<u8>>>>>
-    where B: Into<Vec<u8>> 
+pub fn lowercase_ngrams<B>(bytes: B)
+                           -> LowercaseFilter<NgramsFilter<EnglishUtf8<io::Cursor<Vec<u8>>>>>
+    where B: Into<Vec<u8>>
 {
     LowercaseFilter::after_tokenizer(NgramsFilter::from_bytes(bytes))
 }
@@ -295,12 +306,11 @@ mod tests {
         let bytes = &b"Hi, Dave! How are you?"[..];
         let buf = io::BufReader::with_capacity(1, bytes);
         let toks = collect(EnglishUtf8::new(buf));
-        assert_eq!(toks, vec![
-                   Token::new("Hi", (0, 2), 0),
-                   Token::new("Dave", (4, 8), 1),
-                   Token::new("How", (10, 13), 2),
-                   Token::new("are", (14, 17), 3),
-                   Token::new("you", (18, 21), 4)
-        ]);
+        assert_eq!(toks,
+                   vec![Token::new("Hi", (0, 2), 0),
+                        Token::new("Dave", (4, 8), 1),
+                        Token::new("How", (10, 13), 2),
+                        Token::new("are", (14, 17), 3),
+                        Token::new("you", (18, 21), 4)]);
     }
 }

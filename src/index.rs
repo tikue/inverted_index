@@ -36,8 +36,8 @@ impl InvertedIndex {
         let previous_version = self.docs.insert(doc.id, doc.clone());
         if let Some(previous_version) = previous_version {
             let previous_analyzed = lowercase_ngrams(previous_version.content)
-                                                   .into_iter()
-                                                   .map(Result::unwrap);
+                                        .into_iter()
+                                        .map(Result::unwrap);
             for Token { token, .. } in previous_analyzed {
                 let is_empty = {
                     let docs_for_ngram = self.index.get_mut(&token).unwrap();
@@ -75,22 +75,22 @@ impl InvertedIndex {
 
     fn postings(&self, query: &str) -> PostingsMap {
         LowercaseFilter::from_bytes(query)
-                    .into_iter()
-                    .map(Result::unwrap)
-                    .unique()
-                    .flat_map(|token| self.index.get(&token.token))
-                    .flat_map(|map| map)
-                    .collect::<MergePostingsMap>()
-                    .0
+            .into_iter()
+            .map(Result::unwrap)
+            .unique()
+            .flat_map(|token| self.index.get(&token.token))
+            .flat_map(|map| map)
+            .collect::<MergePostingsMap>()
+            .0
 
     }
 
     fn phrase(&self, phrase: &str) -> PostingsMap {
         let terms: Vec<_> = LowercaseFilter::from_bytes(phrase)
-                                        .into_iter()
-                                        .map(Result::unwrap)
-                                        .map(|token| token.token)
-                                        .collect();
+                                .into_iter()
+                                .map(Result::unwrap)
+                                .map(|token| token.token)
+                                .collect();
         let postings: Vec<_> = terms.windows(2)
                                     .map(|adjacent_terms| {
                                         let term0 = &adjacent_terms[0];
