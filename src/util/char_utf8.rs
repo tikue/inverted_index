@@ -1,5 +1,5 @@
 // Original authorship burntsushi.
-
+#![cfg_attr(rustfmt, rustfmt_skip)]
 use std::str;
 
 // UTF-8 ranges and tags for encoding characters
