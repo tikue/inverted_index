@@ -1,6 +1,5 @@
 // Original authorship BurntSushi
 
-use std::ascii::AsciiExt;
 use std::io;
 
 use util::char_utf8::decode_utf8;
@@ -154,7 +153,6 @@ impl<Buf: io::BufRead> Tokenizer for EnglishUtf8<Buf> {
                     self.offset += n;
                     continue;
                 }
-                let c = c.to_ascii_lowercase();
                 if tok.token.is_empty() {
                     tok.position.offsets.0 = self.offset;
                 }
@@ -172,12 +170,35 @@ impl<Buf: io::BufRead> Tokenizer for EnglishUtf8<Buf> {
 
 /// An analyzer that tokenizes its input and returns each subslice of each token that starts from
 /// the first char.
-pub struct NgramsAnalyzer<Tknzr: Tokenizer> {
+pub struct NgramsFilter<Tknzr: Tokenizer> {
     tokenizer: Tknzr,
     next: Vec<Token>,
 }
 
-impl<Tknzr: Tokenizer> Tokenizer for NgramsAnalyzer<Tknzr> {
+impl<Buf: io::BufRead> NgramsFilter<EnglishUtf8<Buf>> {
+    /// Creates a new NgramsFilter with a backing English UTF-8 tokenizer backed by the buffer.
+    pub fn new(buf: Buf) -> NgramsFilter<EnglishUtf8<Buf>> {
+        NgramsFilter {
+            tokenizer: EnglishUtf8::new(buf),
+            next: vec![],
+        }
+    }
+}
+
+impl NgramsFilter<EnglishUtf8<io::Cursor<Vec<u8>>>> {
+    /// Creates a new NgramsFilter with a backing English UTF-8 tokenizer backed by the bytes.
+    pub fn from_bytes<B>(bytes: B) -> NgramsFilter<EnglishUtf8<io::Cursor<Vec<u8>>>>
+        where B: Into<Vec<u8>> 
+    {
+        NgramsFilter {
+            tokenizer: EnglishUtf8::from_bytes(bytes),
+            next: vec![],
+        }
+    }
+
+}
+
+impl<Tknzr: Tokenizer> Tokenizer for NgramsFilter<Tknzr> {
     fn read(&mut self, tok: &mut Token) -> io::Result<bool> {
         match self.next.pop() {
             Some(next) => { 
@@ -186,92 +207,78 @@ impl<Tknzr: Tokenizer> Tokenizer for NgramsAnalyzer<Tknzr> {
             }
             None => {
                 match self.tokenizer.read(tok) {
-                    done @ Ok(false) | Err(_) => done,
+                    done @ Ok(false) | done @ Err(_) => done,
                     Ok(true) => {
-                        let chars: Vec<_> = tok.token.char_indices().collect();
-                        (1..chars.len() + 1).map(|to| {
-                            let word = chars[..to]
-                                           .iter()
-                                           .flat_map(|&(_, c)| c)
-                                           .collect();
-                            let start = self.chars[0].0;
-                            let (last_idx, last_char) = self.chars[to - 1];
+                        let start = tok.position.offsets.0;
+                        let chars: Vec<_> = tok.token.char_indices()
+                                                     .map(|(offset, c)| (start + offset, c))
+                                                     .collect();
+                        self.next.extend((1..chars.len() + 1).rev().map(|to| {
+                            let token: String = chars[..to].iter()
+                                                  .map(|&(_, c)| c)
+                                                  .collect();
+                            let (last_idx, last_char) = chars[to - 1];
                             let finish = last_idx + last_char.len_utf8();
-                            (word, Position::new((start, finish), self.position))
+                            Token::new(token, (start, finish), tok.position.position)
+                        }));
+                        *tok = self.next.pop().unwrap();
+                        Ok(true)
                     }
                 }
             }
         }
     }
-
-    type TokenPositions = iter::FlatMap<
-                    iter::Enumerate<WordPositionsNoWhitespace<'a>>,
-                    NgramsIter,
-                    NgramsFn>;
-
-    fn analyze(&self, s: &'a str) -> Self::TokenPositions {
-
-        s.char_indices()
-         .group_by(is_whitespace as fn(&(usize, char)) -> bool)
-         .filter(not_whitespace as fn(&(bool, Vec<(usize, char)>)) -> bool)
-         .enumerate()
-         .flat_map(ngrams)
-    }
 }
 
-type WordPositions<'a> = GroupBy<bool, CharIndices<'a>, fn(&(usize, char)) -> bool>;
-type WordPositionsNoWhitespace<'a> = iter::Filter<
-    WordPositions<'a>,
-    fn(&(bool, Vec<(usize, char)>)) -> bool>;
-type NgramsIter = iter::Map<ops::Range<usize>, Ngrams>;
-type NgramsFn = fn((usize, (bool, Vec<(usize, char)>))) -> NgramsIter;
-type OnlyTokens<I> = iter::Map<I, fn((String, Position)) -> String>;
-type WhitespaceTokenPositions<'a> = iter::Map<iter::Enumerate<WordPositionsNoWhitespace<'a>>, 
-                        fn((usize, (bool, Vec<(usize, char)>))) -> (String, Position)>;
-
-fn not_whitespace(&(is_whitespace, _): &(bool, Vec<(usize, char)>)) -> bool {
-    !is_whitespace
+/// An analyzer that tokenizes and lowercases its input
+pub struct LowercaseFilter<Tknzr: Tokenizer> {
+    tokenizer: Tknzr,
 }
 
-fn is_whitespace(&(_, c): &(usize, char)) -> bool {
-    c.is_whitespace()
-}
-
-struct Ngrams {
-    position: usize,
-    chars: Vec<(usize, char)>,
-}
-
-impl Ngrams {
-    fn new(position: usize, chars: Vec<(usize, char)>) -> Ngrams {
-        Ngrams {
-            position: position,
-            chars: chars,
+impl<Tknzr: Tokenizer> LowercaseFilter<Tknzr> {
+    /// Creates a new LowercaseFilter with the specified backing tokenizer.
+    pub fn after_tokenizer(tokenizer: Tknzr) -> LowercaseFilter<Tknzr> {
+        LowercaseFilter {
+            tokenizer: tokenizer
         }
     }
 }
 
-impl Fn<(usize,)> for Ngrams {
-    extern "rust-call" fn call(&self, (to,): (usize,)) -> (String, Position) {
-        let word = self.chars[..to].iter().flat_map(|&(_, c)| c.to_lowercase()).collect();
-        let start = self.chars[0].0;
-        let (last_idx, last_char) = self.chars[to - 1];
-        let finish = last_idx + last_char.len_utf8();
-        (word, Position::new((start, finish), self.position))
+impl<Buf: io::BufRead> LowercaseFilter<EnglishUtf8<Buf>> {
+    /// Creates a new LowercaseFilter with a backing English UTF-8 tokenizer backed by the buffer.
+    pub fn new(buf: Buf) -> LowercaseFilter<EnglishUtf8<Buf>> {
+        LowercaseFilter::after_tokenizer(EnglishUtf8::new(buf))
     }
 }
 
-impl FnMut<(usize,)> for Ngrams {
-    extern "rust-call" fn call_mut(&mut self, to: (usize,)) -> (String, Position) {
-        self.call(to)
+impl LowercaseFilter<EnglishUtf8<io::Cursor<Vec<u8>>>> {
+    /// Creates a new LowercaseFilter with a backing English UTF-8 tokenizer backed by the bytes.
+    pub fn from_bytes<B>(bytes: B) -> LowercaseFilter<EnglishUtf8<io::Cursor<Vec<u8>>>>
+        where B: Into<Vec<u8>> 
+    {
+        LowercaseFilter::after_tokenizer(EnglishUtf8::from_bytes(bytes))
+    }
+
+}
+
+impl<Tknzr: Tokenizer> Tokenizer for LowercaseFilter<Tknzr> {
+    fn read(&mut self, tok: &mut Token) -> io::Result<bool> {
+        match self.tokenizer.read(tok) {
+            done @ Ok(false) | done @ Err(_) => done,
+            done @ Ok(true) => {
+                tok.token = tok.token.to_lowercase();
+                done
+            }
+        }
     }
 }
 
-impl FnOnce<(usize,)> for Ngrams {
-    type Output = (String, Position);
-    extern "rust-call" fn call_once(self, to: (usize,)) -> (String, Position) {
-        self.call(to)
-    }
+/// Creates a lowercase-ngrams tokenizer by chaining two filters.
+pub fn lowercase_ngrams<B>(bytes: B) 
+    -> LowercaseFilter<NgramsFilter<EnglishUtf8<io::Cursor<Vec<u8>>>>>
+    where B: Into<Vec<u8>> 
+{
+    LowercaseFilter::after_tokenizer(NgramsFilter::from_bytes(bytes))
 }
 
 #[cfg(test)]
@@ -289,9 +296,9 @@ mod tests {
         let buf = io::BufReader::with_capacity(1, bytes);
         let toks = collect(EnglishUtf8::new(buf));
         assert_eq!(toks, vec![
-                   Token::new("hi", (0, 2), 0),
-                   Token::new("dave", (4, 8), 1),
-                   Token::new("how", (10, 13), 2),
+                   Token::new("Hi", (0, 2), 0),
+                   Token::new("Dave", (4, 8), 1),
+                   Token::new("How", (10, 13), 2),
                    Token::new("are", (14, 17), 3),
                    Token::new("you", (18, 21), 4)
         ]);

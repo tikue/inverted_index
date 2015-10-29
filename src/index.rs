@@ -12,33 +12,11 @@ use util::*;
 /// from words to postings.
 #[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, 
          RustcEncodable, RustcDecodable)]
-pub struct InvertedIndex<QueryAnalyzer=WhitespaceAnalyzer, DocAnalyzer=NgramsAnalyzer> {
+pub struct InvertedIndex {
     // Maps terms to their postings
     index: BTreeMap<String, PostingsMap>,
     // Maps doc ids to their docs
     docs: BTreeMap<usize, Document>,
-    query_analyzer: QueryAnalyzer,
-    doc_analyzer: DocAnalyzer,
-}
-
-/// Builder for an InvertedIndex with custom analyzers.
-pub struct InvertedIndexBuilder<QueryAnalyzer, DocAnalyzer> {
-    /// The analyzer to use on queries.
-    pub query_analyzer: QueryAnalyzer,
-    /// The analyzer to use on documents.
-    pub doc_analyzer: DocAnalyzer,
-}
-
-impl<QueryAnalyzer, DocAnalyzer> InvertedIndexBuilder<QueryAnalyzer, DocAnalyzer> {
-    /// Build an InvertedIndex using custom analyzers.
-    pub fn build(self) -> InvertedIndex<QueryAnalyzer, DocAnalyzer> {
-        InvertedIndex {
-            index: BTreeMap::new(),
-            docs: BTreeMap::new(),
-            query_analyzer: self.query_analyzer,
-            doc_analyzer: self.doc_analyzer,
-        }
-    }
 }
 
 impl InvertedIndex {
@@ -47,15 +25,9 @@ impl InvertedIndex {
         InvertedIndex {
             index: BTreeMap::new(),
             docs: BTreeMap::new(),
-            query_analyzer: WhitespaceAnalyzer,
-            doc_analyzer: NgramsAnalyzer,
         }
     }
-}
 
-impl<QueryAnalyzer, DocAnalyzer> InvertedIndex<QueryAnalyzer, DocAnalyzer>
-    where QueryAnalyzer: for <'a> Analyzer<'a>,
-          DocAnalyzer: for <'a> Analyzer<'a> {
     /// Inserts the document.
     /// Insertings a document involves tokenizing the document's content
     /// and inserting each token into the index, pointing to the document and its position in the
@@ -63,23 +35,26 @@ impl<QueryAnalyzer, DocAnalyzer> InvertedIndex<QueryAnalyzer, DocAnalyzer>
     pub fn index(&mut self, doc: Document) {
         let previous_version = self.docs.insert(doc.id, doc.clone());
         if let Some(previous_version) = previous_version {
-            let previous_analyzed = self.doc_analyzer.analyze(previous_version.content());
-            for (ngram, _) in previous_analyzed {
+            let previous_analyzed = lowercase_ngrams(previous_version.content)
+                                                   .into_iter()
+                                                   .map(Result::unwrap);
+            for Token { token, .. } in previous_analyzed {
                 let is_empty = {
-                    let docs_for_ngram = self.index.get_mut(&ngram).unwrap();
+                    let docs_for_ngram = self.index.get_mut(&token).unwrap();
                     docs_for_ngram.remove(&doc.id);
                     docs_for_ngram.is_empty()
                 };
                 if is_empty {
-                    self.index.remove(&ngram);
+                    self.index.remove(&token);
                 }
             }
         }
 
-        let analyzed = self.doc_analyzer.analyze(doc.content());
-        for (ngram, position) in analyzed {
+        let analyzed = lowercase_ngrams(doc.content).into_iter().map(Result::unwrap);
+
+        for Token { token, position } in analyzed {
             self.index
-                .entry(ngram)
+                .entry(token)
                 .or_insert_with(BTreeMap::new)
                 .entry(doc.id)
                 .or_insert_with(Vec::new)
@@ -99,18 +74,23 @@ impl<QueryAnalyzer, DocAnalyzer> InvertedIndex<QueryAnalyzer, DocAnalyzer>
     }
 
     fn postings(&self, query: &str) -> PostingsMap {
-        self.query_analyzer
-            .analyze_tokens(query)
-            .unique()
-            .flat_map(|word| self.index.get(&word))
-            .flat_map(|map| map)
-            .collect::<MergePostingsMap>()
-            .0
+        LowercaseFilter::from_bytes(query)
+                    .into_iter()
+                    .map(Result::unwrap)
+                    .unique()
+                    .flat_map(|token| self.index.get(&token.token))
+                    .flat_map(|map| map)
+                    .collect::<MergePostingsMap>()
+                    .0
 
     }
 
     fn phrase(&self, phrase: &str) -> PostingsMap {
-        let terms: Vec<_> = self.query_analyzer.analyze_tokens(phrase).collect();
+        let terms: Vec<_> = LowercaseFilter::from_bytes(phrase)
+                                        .into_iter()
+                                        .map(Result::unwrap)
+                                        .map(|token| token.token)
+                                        .collect();
         let postings: Vec<_> = terms.windows(2)
                                     .map(|adjacent_terms| {
                                         let term0 = &adjacent_terms[0];
@@ -417,32 +397,11 @@ mod test {
     }
 
     #[test]
-    fn prefix_max_char_edge_case() {
-        use std::char;
-        let mut index = InvertedIndex::new();
-        let mut s: String = "a".into();
-        s.push(char::MAX);
-        s.push(char::MAX);
-        let doc1 = Document::new(1, s.clone());
-        index.index(doc1.clone());
-        s.pop();
-        let expected: BTreeMap<_, _> = [(doc1.id.clone(), vec![Position::new((0, 9), 0)])]
-                                           .iter()
-                                           .cloned()
-                                           .collect();
-        let search_results = index.query(&Prefix(&s));
-        assert_eq!(search_results.len(), expected.len());
-        for search_result in &search_results {
-            assert_eq!(&search_result.positions, &expected[&search_result.doc.id]);
-        }
-    }
-
-    #[test]
     fn char_len_change() {
         let mut index = InvertedIndex::new();
-        let s: String = "İ".into();
+        let s: String = "İİ".into();
         let doc1 = Document::new(1, s.clone());
         index.index(doc1.clone());
-        assert_eq!(index.index["i̇"][&1][0].offsets.1, 2);
+        assert_eq!(index.index["i̇i̇"][&1][0].offsets.1, 4);
     }
 }
